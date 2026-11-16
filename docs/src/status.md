@@ -1,3 +1,10 @@
+> *"It's sad (So sad), so sad*
+> *It's a sad, sad situation*
+> *And it's gettin' more and more absurd*
+> *It's sad (So sad), so sad*
+> *Why can't we talk it over?"*
+> — Elton John
+
 # Status
 
 **scaffold** — repo initialized with the charly-vibes family conventions

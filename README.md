@@ -1,10 +1,9 @@
-> *"Hey, hey, hey*
-> *I'm your life*
-> *I'm the one who takes you there*
-> *I'm the one who cares*
-> *...*
-> *Sad but true"*
-> — Metallica
+> *"It's sad (So sad), so sad*
+> *It's a sad, sad situation*
+> *And it's gettin' more and more absurd*
+> *It's sad (So sad), so sad*
+> *Why can't we talk it over?"*
+> — Elton John
 
 # sad
 

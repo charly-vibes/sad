@@ -1,3 +1,10 @@
+> *"It's sad (So sad), so sad*
+> *It's a sad, sad situation*
+> *And it's gettin' more and more absurd*
+> *It's sad (So sad), so sad*
+> *Why can't we talk it over?"*
+> — Elton John
+
 # Getting Started
 
 `sad` is a deterministic gate on in-code prose — comments and doc strings.

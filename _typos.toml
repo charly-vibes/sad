@@ -3,6 +3,9 @@ extend-ignore-identifiers-re = [
     # mdBook's own CSS variable spelling (theme/charly.css) — must match
     # upstream mdbook theme variable names.
     "existant",
+    # Elton John lyric in the README/docs banner — intentional contraction,
+    # quote is transcribed verbatim, not a spelling error.
+    "gettin",
 ]
 
 [files]

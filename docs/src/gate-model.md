@@ -1,3 +1,10 @@
+> *"It's sad (So sad), so sad*
+> *It's a sad, sad situation*
+> *And it's gettin' more and more absurd*
+> *It's sad (So sad), so sad*
+> *Why can't we talk it over?"*
+> — Elton John
+
 # Gate Model
 
 > **Status: specified 2026-11-16 — not implemented.** This page records the
