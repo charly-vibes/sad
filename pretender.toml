@@ -1,0 +1,13 @@
+[pretender]
+mode = "gate"
+languages = ["auto"]
+exclude = ["vendor/**", "node_modules/**", "**/*_generated.*"]
+
+[roles.test]
+paths = ["sad/tests/**", "**/*_test.*"]
+
+[roles.library]
+paths = ["sad/src/**"]
+
+[roles.vendor]
+paths = ["vendor/**", "node_modules/**"]

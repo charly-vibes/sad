@@ -1,0 +1,8 @@
+[adapters]
+default = "testaruda-adapter-rust"
+
+[discover]
+exclude = [ "target", ".git", "book", ".testaruda",]
+
+[adapters.extensions]
+".rs" = "testaruda-adapter-rust"

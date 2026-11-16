@@ -1,0 +1,13 @@
+[default]
+extend-ignore-identifiers-re = [
+    # mdBook's own CSS variable spelling (theme/charly.css) — must match
+    # upstream mdbook theme variable names.
+    "existant",
+]
+
+[files]
+extend-exclude = [
+    "target/**",
+    "book/**",
+    ".testaruda/**",
+]

@@ -1,0 +1,32 @@
+[package]
+name = "sad"
+version = "0.1.0"
+edition = "2024"
+description = "Documentation gate — code should speak for itself; prose means refactor"
+license = "Apache-2.0"
+repository = "https://github.com/charly-vibes/sad"
+readme = "README.md"
+keywords = ["cli", "documentation", "code-quality", "gates", "charly-vibes"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "sad"
+path = "src/main.rs"
+
+[dependencies]
+# Suite envelope output — genesis is the shared charly-vibes infrastructure
+# crate. Registry dep (NOT git): cargo publish requires all deps to resolve
+# on crates.io.
+genesis = { package = "genesis-vibes", version = "0.13" }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+
+[profile.release]
+lto = "fat"
+strip = "symbols"
+codegen-units = 1

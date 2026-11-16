@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "adopted_at": "2026-11-16T21:49:36Z",
+  "finding_ids": [
+    "sad/tests/cli_test.rs::missing_subcommand_is_an_envelope_error_not_help_text::min_assertions",
+    "sad/tests/cli_test.rs::unknown_subcommand_emits_envelope_not_clap_text::min_assertions",
+    "sad/tests/cli_test.rs::version_json_emits_ok_envelope::min_assertions",
+    "sad/tests/cli_test.rs::version_text_mode_is_a_short_banner::min_assertions"
+  ]
+}

@@ -1,0 +1,15 @@
+[book]
+title = "sad"
+authors = ["charly vibes"]
+description = "Documentation gate — code should speak for itself; prose means refactor"
+src = "docs/src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "coal"
+preferred-dark-theme = "coal"
+additional-css = ["theme/charly.css"]
+git-repository-url = "https://github.com/charly-vibes/sad"
+edit-url-template = "https://github.com/charly-vibes/sad/edit/main/{path}"
