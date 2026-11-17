@@ -39,13 +39,14 @@ just install
 ```
 
 The [gate model](docs/src/gate-model.md) — three legitimate prose channels,
-four checks, pretender-mirror output contract — is specified but not
+five checks, pretender-mirror output contract — is specified but not
 implemented yet.
 
 ## Current command surface
 
 ```bash
 sad version [--json]   # tool identity as a genesis suite envelope
+sad check [--json] [--all] [--adopt] [--config <path>]   # gate run (skeleton)
 ```
 
 Every command emits the suite JSON envelope; exit status mirrors `ok`.

@@ -9,9 +9,15 @@
 
 **scaffold** — repo initialized with the charly-vibes family conventions
 (genesis envelope CLI, just/testaruda TDD loop, lefthook pre-commit gates,
-mdBook docs). No gate logic yet.
+mdBook docs). No analysis logic yet.
 
-The **gate design is specified** (2026-11-16) — see the
-[Gate Model](gate-model.md); the EARS spec is the next deliverable
-(ticket `sad-lcy`). Implementation history lives in
+The **gate design is specified** — see the [Gate Model](gate-model.md). The
+EARS spec has landed
+[in the change directory](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/specs/comment-gate/spec.md)
+while the change is open, and deploys to
+[`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
+on archive. Ticket `sad-lcy` is closed. Implementation is under tickets. The
+live command surface is `sad version` and a `sad check` skeleton that
+accepts `--all`, `--adopt`, and `--config` but reports an empty, passing
+body. Implementation history lives in
 [CHANGELOG](https://github.com/charly-vibes/sad/blob/main/CHANGELOG.md).
