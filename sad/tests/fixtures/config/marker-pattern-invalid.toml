@@ -1,0 +1,2 @@
+# Semantically invalid: "[" is not a valid regex.
+marker_pattern = "["

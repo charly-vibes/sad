@@ -1,0 +1,2 @@
+# Type error: suppression_cap is an integer option, not a string.
+suppression_cap = "five"

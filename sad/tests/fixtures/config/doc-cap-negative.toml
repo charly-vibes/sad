@@ -1,0 +1,2 @@
+# Type error: doc_summary_cap is a usize, so a negative integer is invalid.
+doc_summary_cap = -1

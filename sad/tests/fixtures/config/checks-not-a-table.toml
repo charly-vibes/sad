@@ -1,0 +1,2 @@
+# Type error: checks is a table of toggles, not a scalar.
+checks = 3

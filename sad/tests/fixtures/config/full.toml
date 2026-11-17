@@ -1,0 +1,21 @@
+# Every knob set explicitly, each to a value that differs from its default.
+doc_summary_cap = 3
+marker_prefix = "ticket"
+marker_pattern = '\bTICKET-[0-9]+\b'
+require_header = true
+suppression_cap = 5
+exclude = ["vendor/**", "**/generated/**"]
+
+[checks]
+comment_outside_channel = false
+doc_summary_cap_exceeded = false
+unresolvable_marker = false
+missing_header = false
+suppression_cap_exceeded = false
+
+[resolvers]
+beads = false
+openspec = true
+
+[attribution]
+trailer = "Session"

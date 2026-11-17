@@ -1,0 +1,2 @@
+# sad's own repo config: the dogfood-only default is header enforcement on.
+require_header = true

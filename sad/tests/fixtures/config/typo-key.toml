@@ -1,0 +1,2 @@
+# Typo of a real key: deny_unknown_fields must catch it.
+marker_prefixx = "see"

@@ -1,0 +1,2 @@
+# Semantically invalid: a zero summary cap would suppress every doc summary.
+doc_summary_cap = 0
