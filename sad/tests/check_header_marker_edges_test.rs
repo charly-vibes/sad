@@ -221,6 +221,46 @@ fn fabricated_multi_hyphen_marker_reports_the_full_id() {
     assert_eq!(finding.symbol_path, node.symbol_path);
 }
 
+// see sad-o41: a trailing hyphen must not change the cited id.
+#[test]
+fn trailing_hyphen_marker_resolves_against_the_trimmed_id() {
+    let cfg = Config::default();
+    let file = analyze("marker_trailing_hyphen_resolvable.rs", &cfg);
+    let node = only_marker_node(&file);
+    assert!(
+        node.body.contains("sad-lcy-"),
+        "the fixture must cite the trailing-hyphen id"
+    );
+
+    let ctx = beads_context(&["sad-lcy"]);
+    let findings = marker::run(&file, &cfg, &ctx);
+    assert_eq!(
+        findings.len(),
+        0,
+        "attribution trims the trailing hyphen, so the check must judge `sad-lcy`, got {findings:?}"
+    );
+}
+
+// see sad-o41: glued punctuation must end the cited id where attribution ends it.
+#[test]
+fn glued_punctuation_marker_resolves_against_the_leading_id() {
+    let cfg = Config::default();
+    let file = analyze("marker_glued_punctuation_resolvable.rs", &cfg);
+    let node = only_marker_node(&file);
+    assert!(
+        node.body.contains("sad-lcy(sic)"),
+        "the fixture must cite the id with glued punctuation"
+    );
+
+    let ctx = beads_context(&["sad-lcy"]);
+    let findings = marker::run(&file, &cfg, &ctx);
+    assert_eq!(
+        findings.len(),
+        0,
+        "attribution stops the id at the parenthesis, so the check must judge `sad-lcy`, got {findings:?}"
+    );
+}
+
 // EDGE-003: an openspec id resolves a marker positively instead of being flagged.
 #[test]
 fn openspec_resolver_satisfies_a_cited_marker() {
