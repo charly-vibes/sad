@@ -40,7 +40,7 @@ jobs:
 
       - name: Install ecosystem tools (§4 dogfood matrix, pinned)
         run: |
-          cargo install --locked wai-cli@2026.10.19 dulce-de-leche@0.9.0 pretender@0.11.1 espectacular@0.12.3 testaruda@0.5.9 typos-cli@1.50.3
+          cargo install --locked wai-cli@2026.10.19 dulce-de-leche@0.9.0 pretender@0.10.0 espectacular@0.12.3 testaruda@0.5.9 typos-cli@1.50.3
           npm install -g @fission-ai/openspec@2.0.0
       - name: Install bd (beads, pinned §4)
         run: |
