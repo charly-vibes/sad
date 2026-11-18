@@ -9,7 +9,7 @@
 
 [tools]
 wai = "2026.10.19"         # crates.io: wai-cli
-pretender = "0.11.0"       # crates.io: pretender
+pretender = "0.11.1"       # crates.io: pretender
 espectacular = "0.12.3"    # crates.io (bin: ah)
 testaruda = "0.5.9"        # crates.io
 dulce-de-leche = "0.9.0"   # crates.io (bin: ddl)
