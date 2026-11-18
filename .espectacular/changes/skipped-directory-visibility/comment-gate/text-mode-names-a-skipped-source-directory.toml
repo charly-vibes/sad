@@ -1,0 +1,9 @@
+id = "text-mode-names-a-skipped-source-directory"
+description = "The one-line text render appends a suffix naming src/target/, keeps the analyzed count, and leaves a tree without ambiguous skips unchanged."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "nested_skip_list_directory_is_named_in_text_mode"}]

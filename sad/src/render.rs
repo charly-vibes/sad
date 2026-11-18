@@ -1,9 +1,10 @@
 //! Purpose: render an emitted envelope JSON string as the one-line text mode.
 //! Responsibilities: pick the check or suite rendering, summarise the verdict
 //! and counts, name the first finding with its remediation, explain an empty
-//! attribution scope, and name every skipped source with its reason. The check
-//! line is assembled from a verdict prefix, an optional first-finding clause,
-//! and the attribution and skip suffixes, each built by its own helper.
+//! attribution scope, and name every skipped source with its reason and every
+//! skipped source directory. The check line is assembled from a verdict
+//! prefix, an optional first-finding clause, and the attribution and skip
+//! suffixes, each built by its own helper.
 //! Rationale: text mode is a convenience view of the same envelope, never a
 //! second output format with different content, so every branch here reads the
 //! JSON the machine consumer reads. Keeping the renderers out of `cli.rs`
@@ -58,7 +59,15 @@ fn check_text(v: &Value) -> String {
             plural(unattributed, "file"),
         ));
     }
-    if let Some(suffix) = skipped_suffix(&v["warnings"]) {
+    if let Some(suffix) = skipped_suffix(&v["warnings"], "unreadable_source", "file", true) {
+        line.push_str(&suffix);
+    }
+    if let Some(suffix) = skipped_suffix(
+        &v["warnings"],
+        "skipped_source_directory",
+        "directory",
+        false,
+    ) {
         line.push_str(&suffix);
     }
     line.push('\n');
@@ -103,36 +112,49 @@ fn first_finding_clause(findings: &Value, ok: bool) -> Option<String> {
     first_finding_brief(findings).map(|brief| format!("; {brief}"))
 }
 
-/// The skipped-source suffix, read from the `unreadable_source` warnings.
+/// The suffix naming every warning with `rule_name`, or `None` when there is none.
 ///
 /// Text mode reads the machine contract rather than recomputing the skip set,
-/// so it cannot drift from the JSON. `None` when nothing was skipped.
-fn skipped_suffix(warnings: &Value) -> Option<String> {
-    let mut skipped: Vec<String> = Vec::new();
+/// so it cannot drift from the JSON; `noun` labels the entities, and
+/// `with_reason` appends the warning message in parentheses, which is how a
+/// skipped source states why it was not judged. A skipped directory carries no
+/// reason beyond its own path.
+fn skipped_suffix(
+    warnings: &Value,
+    rule_name: &str,
+    noun: &str,
+    with_reason: bool,
+) -> Option<String> {
+    let mut entities: Vec<String> = Vec::new();
     for warning in warnings.as_array()? {
-        if warning["rule_name"] == "unreadable_source" {
-            skipped.push(format!(
-                "{} ({})",
-                warning["entity_id"].as_str()?,
-                warning["message"].as_str()?
-            ));
+        if warning["rule_name"] != rule_name {
+            continue;
         }
+        let id = warning["entity_id"].as_str()?;
+        entities.push(if with_reason {
+            format!("{id} ({})", warning["message"].as_str()?)
+        } else {
+            id.to_string()
+        });
     }
-    if skipped.is_empty() {
+    if entities.is_empty() {
         return None;
     }
-    let count = skipped.len() as u64;
+    let count = entities.len() as u64;
     Some(format!(
         "; skipped {count} {}: {}",
-        plural(count, "file"),
-        skipped.join(", "),
+        plural(count, noun),
+        entities.join(", "),
     ))
 }
 
-/// `count` copies of `noun`, pluralised by appending `s`.
+/// `count` copies of `noun`, pluralised by appending `s` or turning a trailing
+/// `y` into `ies`.
 fn plural(count: u64, noun: &str) -> String {
     if count == 1 {
         noun.to_string()
+    } else if let Some(stem) = noun.strip_suffix('y') {
+        format!("{stem}ies")
     } else {
         format!("{noun}s")
     }

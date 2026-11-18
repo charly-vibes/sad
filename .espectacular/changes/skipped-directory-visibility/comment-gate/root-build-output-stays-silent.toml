@@ -1,0 +1,9 @@
+id = "root-build-output-stays-silent"
+description = "A root-level target/ is skipped with no skipped_source_directory warning and the analyzed count still covers the non-skipped source."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "root_build_output_stays_silent"}]

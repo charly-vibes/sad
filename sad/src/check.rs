@@ -43,9 +43,11 @@ use crate::scope;
 
 use self::discovery::discover_files;
 use self::resolvers::resolver_context;
+use self::warnings::{skipped_directory_warnings, unsupported_warnings};
 
 mod discovery;
 mod resolvers;
+mod warnings;
 
 /// Beads ledger path, relative to the repository root.
 pub const BEADS_LEDGER: &str = ".beads/issues.jsonl";
@@ -78,6 +80,7 @@ pub fn run(repo: &Path, cfg: &Config, all: bool, adopt: bool) -> Result<CheckRep
     let stats = CheckStats::of(&analyzed, &debt, &findings, files);
     let mut warnings = unsupported_warnings(&selection.unsupported);
     warnings.extend(skipped_warnings(&skipped));
+    warnings.extend(skipped_directory_warnings(&selection.skipped_directories));
     let report = CheckReport {
         findings,
         suppression_debt: debt,
@@ -99,6 +102,7 @@ struct Selection {
     without_commit: usize,
     unattributed: usize,
     unsupported: Vec<String>,
+    skipped_directories: Vec<String>,
 }
 
 /// Files this run analyses: the discovered tree minus `exclude` globs, scoped
@@ -121,30 +125,8 @@ fn select_files(repo: &Path, cfg: &Config, all: bool) -> Selection {
         without_commit: scoped.without_commit,
         unattributed: scoped.unattributed,
         unsupported: discovery.unsupported,
+        skipped_directories: discovery.skipped,
     }
-}
-
-/// One envelope warning per file whose extension the gate cannot parse.
-///
-/// Discovery keeps these paths instead of dropping them so the language
-/// boundary is visible; the warning names the file and the supported set.
-fn unsupported_warnings(paths: &[String]) -> Vec<Warning> {
-    paths
-        .iter()
-        .map(|path| Warning {
-            rule_name: "unsupported_extension".to_string(),
-            entity_id: Some(path.clone()),
-            message: format!(
-                "`{path}` has an extension the gate cannot parse; it was skipped, so its \
-                 comments were not judged (supported extensions: .rs, .py, .ts, .js, .mjs)"
-            ),
-            suggested_remediation: Some(
-                "Rename to a supported extension (.rs, .py, .ts, .js, .mjs) when the file's \
-                 comments must be gated; JSX/TSX and .mts/.cts support is out of scope in v1."
-                    .to_string(),
-            ),
-        })
-        .collect()
 }
 
 /// One selected source file the run could not read as UTF-8.

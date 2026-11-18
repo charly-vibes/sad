@@ -1,0 +1,9 @@
+id = "stub-sources-are-analyzed-as-python"
+description = "A .pyi stub is parsed with the Python frontend and yields the same findings as the equivalent .py source."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "pyi_stubs_are_analyzed_as_python"}]

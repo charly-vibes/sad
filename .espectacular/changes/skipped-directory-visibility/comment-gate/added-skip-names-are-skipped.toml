@@ -1,0 +1,9 @@
+id = "added-skip-names-are-skipped"
+description = "Discovery traverses none of the seven added skip names and reports no source file from them."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "added_skip_names_are_skipped"}]

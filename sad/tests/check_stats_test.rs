@@ -16,9 +16,9 @@ use support::envelope::*;
 fn exemptions_and_excludes_keep_files_out_of_analysis() {
     // spec: Exemptions and excludes / generated files and excluded globs are counted but not analyzed.
     let repo = TempRepo::new("exemptions");
-    repo.copy_fixture("narration.rs", "vendor/x.rs");
+    repo.copy_fixture("narration.rs", "legacy/x.rs");
     repo.copy_fixture("generated.rs", "generated.rs");
-    repo.write("sad.toml", "exclude = [\"vendor/**\"]\n");
+    repo.write("sad.toml", "exclude = [\"legacy/**\"]\n");
 
     let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
 
@@ -27,6 +27,14 @@ fn exemptions_and_excludes_keep_files_out_of_analysis() {
         "excluded and exempt files cannot fail the run: {envelope}"
     );
     assert_eq!(envelope["ok"], true);
+    assert_eq!(
+        envelope["data"]["stats"]["files_discovered"], 2usize,
+        "both files reach discovery; the exclude glob drops one later: {envelope}"
+    );
+    assert_eq!(
+        envelope["data"]["stats"]["files_excluded"], 1usize,
+        "the excluded glob drops exactly one file: {envelope}"
+    );
     assert_eq!(
         envelope["data"]["stats"]["files_analyzed"], 0usize,
         "neither the excluded nor the exempt file is analyzed: {envelope}"
@@ -47,7 +55,7 @@ fn exemptions_and_excludes_keep_files_out_of_analysis() {
             !finding["path"]
                 .as_str()
                 .unwrap_or("")
-                .starts_with("vendor/"),
+                .starts_with("legacy/"),
             "excluded files must never be reported: {finding}"
         );
     }

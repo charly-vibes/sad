@@ -1,0 +1,9 @@
+id = "nested-skip-list-directory-is-named"
+description = "The skipped source yields no finding and exactly one skipped_source_directory warning names src/target/ and the skip-list name target."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "nested_skip_list_directory_is_named"}]

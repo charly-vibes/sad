@@ -1,0 +1,9 @@
+id = "stub-sources-are-discovered"
+description = "Discovery reports a .pyi stub as a supported source file, never as an unsupported extension."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "pyi_stubs_are_discovered"}]
