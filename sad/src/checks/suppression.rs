@@ -120,6 +120,7 @@ fn form_id(form: SuppressionForm) -> &'static str {
         SuppressionForm::Noqa => "noqa",
         SuppressionForm::TypeIgnore => "type_ignore",
         SuppressionForm::TsIgnore => "ts_ignore",
+        SuppressionForm::TsExpectError => "ts_expect_error",
         SuppressionForm::EslintDisable => "eslint_disable",
         SuppressionForm::SadIgnore => "sad_ignore",
     }
@@ -171,6 +172,7 @@ mod tests {
             SuppressionForm::Noqa,
             SuppressionForm::TypeIgnore,
             SuppressionForm::TsIgnore,
+            SuppressionForm::TsExpectError,
             SuppressionForm::EslintDisable,
             SuppressionForm::SadIgnore,
         ] {

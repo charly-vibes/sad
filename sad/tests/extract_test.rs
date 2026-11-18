@@ -9,6 +9,10 @@
 
 mod support;
 
+use std::path::Path;
+
+use sad::config::Config;
+use sad::extract::{analyze_file, language_for_path};
 use sad::model::{AttributionClass, CommentKind, Language, SuppressionForm};
 
 use support::extract::*;
@@ -269,6 +273,34 @@ fn typescript_string_and_template_literals_do_not_become_comment_nodes() {
         &[
             (1, CommentKind::Block, AttributionClass::Header),
             (8, CommentKind::Line, AttributionClass::Prose),
+        ],
+    );
+}
+
+#[test]
+fn pyi_stubs_are_analyzed_as_python() {
+    const STUB: &str = "\"\"\"Purpose: stub-only module docstring.\"\"\"\n\n\nclass Client:\n    \"\"\"Purpose: stub-only class docstring.\"\"\"\n\n    def send(self, payload: str) -> None: ...\n";
+    let path = Path::new("tests/fixtures/attribution/python/stub.pyi");
+
+    assert_eq!(
+        language_for_path(path),
+        Some(Language::Python),
+        ".pyi stubs route to the Python frontend"
+    );
+
+    let file = analyze_file(
+        path,
+        "tests/fixtures/attribution/python/stub.pyi",
+        STUB,
+        &Config::default(),
+    );
+    assert_eq!(file.language, Language::Python);
+    assert!(file.header, "the module docstring is the header channel");
+    assert_nodes(
+        &file,
+        &[
+            (1, CommentKind::Doc, AttributionClass::Header),
+            (5, CommentKind::Doc, AttributionClass::Doc),
         ],
     );
 }

@@ -72,6 +72,7 @@ pub enum SuppressionForm {
     Noqa,
     TypeIgnore,
     TsIgnore,
+    TsExpectError,
     EslintDisable,
     SadIgnore,
 }

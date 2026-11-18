@@ -9,12 +9,13 @@
 //! driving them through `analyze_file` keeps the tests on the same structural
 //! attributions the gate sees at runtime, with no hand-built nodes to drift.
 
-use std::path::{Path, PathBuf};
+mod support;
 
 use sad::checks::{doc_cap, outside_channel};
 use sad::config::{CheckToggles, Config};
-use sad::extract::analyze_file;
-use sad::model::{AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, finding_id};
+use sad::model::{AttributionClass, Finding, FindingKind, finding_id};
+
+use support::prose::{analyze, nodes_of};
 
 const NARRATION: &str = include_str!("fixtures/checks/prose/narration.rs");
 const TODO: &str = include_str!("fixtures/checks/prose/todo.py");
@@ -23,26 +24,6 @@ const STRUCTURED: &str = include_str!("fixtures/checks/prose/doc_structured.rs")
 const TWO_LINE: &str = include_str!("fixtures/checks/prose/doc_two_line.rs");
 const NONPUBLIC: &str = include_str!("fixtures/checks/prose/nonpublic_docstring.py");
 const LAUNDERING: &str = include_str!("fixtures/checks/prose/laundering.py");
-
-fn fixture_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/checks/prose")
-        .join(name)
-}
-
-/// Analyses a prose fixture exactly as the gate would: source from the fixture
-/// file, stable repo-relative path for finding ids.
-fn analyze(name: &str, source: &str, cfg: &Config) -> AnalyzedFile {
-    let rel_path = format!("tests/fixtures/checks/prose/{name}");
-    analyze_file(&fixture_path(name), &rel_path, source, cfg)
-}
-
-fn nodes_of(file: &AnalyzedFile, class: AttributionClass) -> Vec<&CommentNode> {
-    file.nodes
-        .iter()
-        .filter(|node| node.class == class)
-        .collect()
-}
 
 /// The single outside-channel finding a drift variant must produce, so the
 /// id comparisons cannot accidentally ride on an empty or duplicated result.

@@ -1,0 +1,9 @@
+id = "python-shebang-and-coding-cookie-are-file-metadata"
+description = "Both nodes are exemption-class, the exemption summary counts them, no comment_outside_channel finding is emitted, and the file reports exempt: true."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "python_shebang_and_coding_cookie_are_file_metadata"}]

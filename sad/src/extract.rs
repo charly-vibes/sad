@@ -18,7 +18,9 @@ use std::path::Path;
 
 use tree_sitter::Node;
 
-use crate::attribution::{MarkerMatcher, classify, has_generated_marker, is_exemption};
+use crate::attribution::{
+    MarkerMatcher, classify, has_generated_marker, is_coding_cookie, is_exemption, is_shebang,
+};
 use crate::model::{AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language};
 
 pub(crate) use self::analyzer::parser_for;
@@ -37,7 +39,7 @@ mod symbols;
 pub fn language_for_path(path: &Path) -> Option<Language> {
     match path.extension()?.to_str()? {
         "rs" => Some(Language::Rust),
-        "py" => Some(Language::Python),
+        "py" | "pyi" => Some(Language::Python),
         "ts" | "js" | "mjs" => Some(Language::TypeScript),
         _ => None,
     }
@@ -156,9 +158,29 @@ impl<'a> Extractor<'a> {
         let raw = source.get(node.byte_range()).unwrap_or("");
         let kind = comment_kind(self.language, node, raw);
         let body = comment_body(self.language, kind, node, raw, source);
+        if let Some(class) = self.file_metadata_class(node, &body) {
+            self.push(node, kind, class, body, raw, None);
+            return;
+        }
         let is_header = self.is_header_position(node);
         let (class, directive) = classify(&body, kind, is_header, self.marker_prefix, self.markers);
         self.push(node, kind, class, body, raw, directive);
+    }
+
+    /// File-metadata lines are exemptions, never finding-eligible prose.
+    ///
+    /// A Python shebang is file metadata only on source row 0 and a PEP 263
+    /// coding cookie only on rows 0-1; the same text later in the file is
+    /// ordinary prose, so the positional gate lives here and `classify` stays
+    /// a pure function of the body. Exemption is exempt-but-observable:
+    /// [`crate::exemptions::summary`] still counts these nodes.
+    fn file_metadata_class(&self, node: Node<'_>, body: &str) -> Option<AttributionClass> {
+        if self.language != Language::Python {
+            return None;
+        }
+        let row = node.start_position().row;
+        let metadata = (row == 0 && is_shebang(body)) || (row <= 1 && is_coding_cookie(body));
+        metadata.then_some(AttributionClass::Exemption)
     }
 
     fn push_docstring(&mut self, node: Node<'_>, is_module: bool) {

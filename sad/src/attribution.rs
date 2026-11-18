@@ -1,19 +1,23 @@
 //! Purpose: attribute one extracted raw comment to exactly one channel —
-//! header, doc, marker, suppression, exemption, or finding-eligible prose —
-//! and parse suppression directives.
+//! header, doc, marker, suppression, exemption, or finding-eligible prose.
 //! Responsibilities: apply the channel precedence (doc kinds never move to
 //! marker/rationale/suppression; header-position nodes stay header), recognise
-//! every v1 suppression form and the closed rationale tag set, and match
-//! marker-prefixed IDs with a regex compiled once per file while resolving
-//! each cite to its full id token.
+//! the closed rationale tag set, decide the exemption class for Python file
+//! metadata and bounded licence-header lines, and match marker-prefixed IDs
+//! with a regex compiled once per file while resolving each cite to its full
+//! id token. Suppression grammar lives in [`directives`] and is re-exported
+//! here so attribution stays the one entry point.
 //! Rationale: attribution is structural and side-effect free, so it lives
 //! apart from tree walking; keeping one precedence function means every
-//! frontend classifies identically, and giving each suppression form its own
-//! small parser keeps one form's grammar from swallowing another.
+//! frontend classifies identically.
+
+mod directives;
 
 use regex::Regex;
 
-use crate::model::{AttributionClass, CommentKind, SuppressionDirective, SuppressionForm};
+use crate::model::{AttributionClass, CommentKind, SuppressionDirective};
+
+pub use self::directives::parse_directive;
 
 /// Marker-prefix matcher compiled once per analysed file.
 ///
@@ -119,10 +123,102 @@ fn is_rationale(body: &str) -> bool {
 ///
 /// Every SPDX file tag (`SPDX-License-Identifier`, `SPDX-FileCopyrightText`,
 /// `SPDX-FileContributor`, …) is licence metadata rather than prose, so a
-/// body that opens with a tag is an exemption; `@generated` counts only when
-/// it is marker-shaped — the start of one of the body's lines.
+/// body that opens with a tag is an exemption; the same holds for a bounded
+/// licence line beside the tag ([`starts_with_licence_tag`]), and `@generated`
+/// counts only when it is marker-shaped — the start of one of the body's
+/// lines.
 pub fn is_exemption(body: &str) -> bool {
-    starts_with_spdx(body) || has_generated_marker(body)
+    starts_with_spdx(body) || starts_with_licence_tag(body) || has_generated_marker(body)
+}
+
+/// True when a `#`-stripped Python body is a shebang line.
+///
+/// The frontend strips the `#` marker, so a shebang body opens with `!`.
+/// Position is the caller's concern: only source row 0 is file metadata, and
+/// the same text later in the file stays finding-eligible prose.
+pub fn is_shebang(body: &str) -> bool {
+    body.starts_with('!')
+}
+
+/// True when a `#`-stripped body is a PEP 263 coding cookie.
+///
+/// PEP 263 admits `coding: <encoding>` and `coding=<encoding>` in a comment on
+/// source lines 1-2, optionally wrapped in the Emacs `-*-` marker; the
+/// encoding is a bounded bare-word token, so `coding standards` is prose while
+/// `coding: utf-8` is a cookie. The row window is the caller's concern.
+pub fn is_coding_cookie(body: &str) -> bool {
+    let text = body.trim();
+    let text = text.strip_prefix("-*-").unwrap_or(text).trim_start();
+    let Some(rest) = text.strip_prefix("coding") else {
+        return false;
+    };
+    let Some(encoding) = rest.strip_prefix([':', '=']) else {
+        return false;
+    };
+    let token = encoding.trim_start();
+    token.starts_with(is_encoding_char)
+}
+
+/// True for the characters PEP 263 admits in an encoding name.
+fn is_encoding_char(next: char) -> bool {
+    next.is_ascii_alphanumeric() || matches!(next, '-' | '_' | '.')
+}
+
+/// True when the body opens with a bounded licence-header marker.
+///
+/// The shapes are deliberately narrow: a bare `Copyright` word is prose
+/// (`Copyright is a legal concept`), while a copyright line names a year or
+/// the `(c)`/`©` sign. Accepted false-negative boundary: prose that literally
+/// opens with one of these marker shapes is exempt, because the marker is
+/// structural and exempting every line that merely mentions licensing would
+/// swallow narration.
+pub fn starts_with_licence_tag(body: &str) -> bool {
+    let text = body.trim_start();
+    if let Some(rest) = strip_ascii_prefix_ci(text, "copyright") {
+        let rest = rest.trim_start();
+        return starts_with_year(rest)
+            || rest.starts_with('©')
+            || rest
+                .get(..3)
+                .is_some_and(|head| head.eq_ignore_ascii_case("(c)"));
+    }
+    text.starts_with('©')
+        || text
+            .get(..3)
+            .is_some_and(|head| head.eq_ignore_ascii_case("(c)"))
+        || starts_with_phrase(text, "licensed under")
+        || strip_ascii_prefix_ci(text, "license:").is_some()
+        || starts_with_phrase(text, "all rights reserved")
+}
+
+/// Case-insensitive prefix strip.
+fn strip_ascii_prefix_ci<'a>(text: &'a str, needle: &str) -> Option<&'a str> {
+    let head = text.get(..needle.len())?;
+    head.eq_ignore_ascii_case(needle)
+        .then_some(&text[needle.len()..])
+}
+
+/// True when the body opens with `phrase` and the phrase ends on a word
+/// boundary, so `licensed undergraduate` is not a licence header.
+fn starts_with_phrase(text: &str, phrase: &str) -> bool {
+    strip_ascii_prefix_ci(text, phrase).is_some_and(|rest| {
+        rest.chars()
+            .next()
+            .is_none_or(|next| !next.is_alphanumeric())
+    })
+}
+
+/// True when the text opens with a four-digit year, so `Copyright 20261` is
+/// not a copyright notice.
+fn starts_with_year(text: &str) -> bool {
+    let Some(head) = text.get(..4) else {
+        return false;
+    };
+    head.bytes().all(|byte| byte.is_ascii_digit())
+        && text
+            .get(4..)
+            .and_then(|rest| rest.chars().next())
+            .is_none_or(|next| !next.is_ascii_alphanumeric())
 }
 
 /// True when the body opens with an SPDX file tag.
@@ -145,116 +241,6 @@ pub fn has_generated_marker(body: &str) -> bool {
     })
 }
 
-/// Parse one of the five v1 suppression forms from a marker-stripped body.
-///
-/// Each form has its own parser so one form's grammar cannot swallow another;
-/// the first form that matches owns the body.
-pub fn parse_directive(body: &str) -> Option<SuppressionDirective> {
-    let text = body.trim();
-    let lower = text.to_ascii_lowercase();
-
-    parse_sad_ignore(&lower, text)
-        .or_else(|| parse_noqa(&lower, text))
-        .or_else(|| parse_type_ignore(&lower, text))
-        .or_else(|| parse_ts_ignore(&lower, text))
-        .or_else(|| parse_eslint_disable(&lower, text))
-}
-
-/// `sad:ignore <check> [reason…]`.
-fn parse_sad_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
-    let rest = strip_directive(lower, text, "sad:ignore")?;
-    let mut words = rest.split_whitespace();
-    // A directive scopes to exactly one check, so a `sad:ignore` form with no
-    // check id is prose rather than suppression debt.
-    let check = clean_check(words.next()?);
-    if check.is_empty() {
-        return None;
-    }
-    let reason = words.collect::<Vec<_>>().join(" ");
-    Some(SuppressionDirective {
-        form: SuppressionForm::SadIgnore,
-        check: Some(check),
-        reason: (!reason.is_empty()).then_some(reason),
-    })
-}
-
-/// `noqa[: check[, check…]]`.
-fn parse_noqa(lower: &str, text: &str) -> Option<SuppressionDirective> {
-    let check = clean_check(strip_directive(lower, text, "noqa")?);
-    Some(SuppressionDirective {
-        form: SuppressionForm::Noqa,
-        check: (!check.is_empty()).then_some(check),
-        reason: None,
-    })
-}
-
-/// `type: ignore[code]`, where only the bracketed code scopes the directive.
-fn parse_type_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
-    let rest = strip_directive(lower, text, "type: ignore")?;
-    let check = rest
-        .find('[')
-        .and_then(|start| {
-            rest[start + 1..]
-                .find(']')
-                .map(|end| &rest[start + 1..start + 1 + end])
-        })
-        .map(clean_check)
-        .filter(|code| !code.is_empty());
-    Some(SuppressionDirective {
-        form: SuppressionForm::TypeIgnore,
-        check,
-        reason: None,
-    })
-}
-
-/// `@ts-ignore` is unscoped: it carries no check id.
-fn parse_ts_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
-    strip_directive(lower, text, "@ts-ignore")?;
-    Some(SuppressionDirective {
-        form: SuppressionForm::TsIgnore,
-        check: None,
-        reason: None,
-    })
-}
-
-/// `eslint-disable[-line|-next-line] rules`, rules ending at a `--` comment.
-fn parse_eslint_disable(lower: &str, text: &str) -> Option<SuppressionDirective> {
-    let rest = strip_directive(lower, text, "eslint-disable")?.trim_start();
-    let args = rest
-        .strip_prefix("-next-line")
-        .or_else(|| rest.strip_prefix("-line"))
-        .unwrap_or(rest);
-    let check = args.split("--").next().unwrap_or("").trim();
-    Some(SuppressionDirective {
-        form: SuppressionForm::EslintDisable,
-        check: (!check.is_empty()).then(|| check.to_string()),
-        reason: None,
-    })
-}
-
-/// Return the text after `needle` when the lower-cased body starts with it
-/// and the needle ends on a word boundary (so `noqa` cannot match `noqax`).
-fn strip_directive<'a>(lower: &str, text: &'a str, needle: &str) -> Option<&'a str> {
-    if !lower.starts_with(needle) {
-        return None;
-    }
-    let rest = &text[needle.len()..];
-    let boundary = rest
-        .chars()
-        .next()
-        .is_none_or(|next| !next.is_alphanumeric());
-    boundary.then_some(rest)
-}
-
-/// Trim punctuation that separates a directive from its first argument.
-fn clean_check(raw: &str) -> String {
-    raw.trim()
-        .trim_start_matches([':', ','])
-        .trim_end_matches([',', ';'])
-        .trim()
-        .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -274,15 +260,6 @@ mod tests {
             classify_plain("noqa", CommentKind::Doc),
             AttributionClass::Doc
         );
-    }
-
-    #[test]
-    fn sad_ignore_captures_check_and_reason() {
-        let directive = parse_directive("sad:ignore comment_outside_channel reason here")
-            .expect("sad:ignore must parse");
-        assert_eq!(directive.form, SuppressionForm::SadIgnore);
-        assert_eq!(directive.check.as_deref(), Some("comment_outside_channel"));
-        assert_eq!(directive.reason.as_deref(), Some("reason here"));
     }
 
     #[test]
@@ -324,16 +301,6 @@ mod tests {
     }
 
     #[test]
-    fn sad_ignore_requires_a_check_id_and_a_word_boundary() {
-        assert!(parse_directive("sad:ignorex comment_outside_channel").is_none());
-        assert!(parse_directive("sad:ignored").is_none());
-        assert!(
-            parse_directive("sad:ignore").is_none(),
-            "a directive without a check id is prose, not suppression debt"
-        );
-    }
-
-    #[test]
     fn generated_marker_must_be_marker_shaped() {
         assert!(is_exemption("@generated by the schema compiler"));
         assert!(is_exemption("SPDX-License-Identifier: MIT"));
@@ -342,5 +309,43 @@ mod tests {
             "a prose mention of the marker is not generated code"
         );
         assert!(is_exemption("Licence note.\n@generated"));
+    }
+
+    #[test]
+    fn licence_tag_predicate_is_bounded() {
+        for body in [
+            "Copyright 2026 Charly Vibes",
+            "Copyright (c) 2026 Charly Vibes",
+            "Copyright © 2026 Charly Vibes",
+            "© 2026 Charly Vibes",
+            "(c) 2026 Charly Vibes",
+            "Licensed under the Apache License, Version 2.0",
+            "License: MIT",
+            "All rights reserved.",
+        ] {
+            assert!(is_exemption(body), "{body:?} is a bounded licence line");
+        }
+        assert!(
+            !is_exemption("Copyright is a legal concept"),
+            "a bare `Copyright` word is prose, not a licence header"
+        );
+        assert!(!is_exemption("Licensed undergraduate work"));
+        assert!(!is_exemption("All rights reservedly claimed"));
+    }
+
+    #[test]
+    fn python_file_metadata_predicates_match_their_spellings() {
+        assert!(is_shebang("!/usr/bin/env python3"));
+        assert!(!is_shebang(" /usr/bin/env python3"));
+
+        for body in ["-*- coding: utf-8 -*-", "coding: utf-8", "coding=utf-8"] {
+            assert!(is_coding_cookie(body), "{body:?} is a PEP 263 cookie");
+        }
+        assert!(!is_coding_cookie(
+            "coding standards are documented elsewhere"
+        ));
+        assert!(!is_coding_cookie(
+            "this mentions coding: utf-8 mid-sentence"
+        ));
     }
 }

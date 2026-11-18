@@ -1,0 +1,9 @@
+id = "copyright-line-beside-spdx-is-licence-text"
+description = "Both nodes are attribution-class exemption, the exemption summary counts them, no comment_outside_channel finding is emitted, and the file reports exempt."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "copyright_line_beside_spdx_is_licence_text"}]

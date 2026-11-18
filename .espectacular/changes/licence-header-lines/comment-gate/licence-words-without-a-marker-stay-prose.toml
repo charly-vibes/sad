@@ -1,0 +1,9 @@
+id = "licence-words-without-a-marker-stay-prose"
+description = "It remains finding-eligible prose and emits a comment_outside_channel finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "licence_words_without_a_marker_stay_prose"}]

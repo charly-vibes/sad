@@ -1,0 +1,9 @@
+id = "ts-expect-error-is-suppression-debt"
+description = "The envelope contains one suppression_debt entry for it with form ts_expect_error and no scoped check id, and no comment_outside_channel finding is emitted for the directive node."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "ts_expect_error_is_suppression_debt"}]

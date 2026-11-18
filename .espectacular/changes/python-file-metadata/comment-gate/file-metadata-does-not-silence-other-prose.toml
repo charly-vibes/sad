@@ -1,0 +1,9 @@
+id = "file-metadata-does-not-silence-other-prose"
+description = "The metadata lines stay exemption-class, the narration still emits its comment_outside_channel finding, and the file is not exempt: true."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "file_metadata_does_not_silence_other_prose"}]

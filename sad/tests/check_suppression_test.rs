@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+use sad::checks::outside_channel;
 use sad::checks::suppression::{entries, run};
 use sad::config::Config;
 use sad::exemptions::{is_excluded, summary};
@@ -37,6 +38,7 @@ fn form_label(form: &SuppressionForm) -> &'static str {
         SuppressionForm::Noqa => "noqa",
         SuppressionForm::TypeIgnore => "type: ignore",
         SuppressionForm::TsIgnore => "@ts-ignore",
+        SuppressionForm::TsExpectError => "@ts-expect-error",
         SuppressionForm::EslintDisable => "eslint-disable",
         SuppressionForm::SadIgnore => "sad:ignore",
     }
@@ -46,15 +48,15 @@ fn form_label(form: &SuppressionForm) -> &'static str {
 #[test]
 fn every_directive_form_is_counted_once_in_source_order() {
     let mut all: Vec<SuppressionEntry> = Vec::new();
-    for name in ["all_forms.py", "forms.ts", "forms.rs"] {
+    for name in ["all_forms.py", "forms.ts", "expect_error.ts", "forms.rs"] {
         let file = analyze(name);
         all.extend(entries(&file));
     }
 
     assert_eq!(
         all.len(),
-        5,
-        "five directives in these fixtures must yield exactly five debt entries"
+        6,
+        "six directives in these fixtures must yield exactly six debt entries"
     );
 
     let actual: Vec<(String, usize, &'static str)> = all
@@ -63,6 +65,7 @@ fn every_directive_form_is_counted_once_in_source_order() {
         .collect();
     let py = rel_path("all_forms.py");
     let ts = rel_path("forms.ts");
+    let expect_error = rel_path("expect_error.ts");
     let rs = rel_path("forms.rs");
     assert_eq!(
         actual,
@@ -70,6 +73,7 @@ fn every_directive_form_is_counted_once_in_source_order() {
             (py.clone(), 8, "noqa"),
             (py, 9, "type: ignore"),
             (ts, 7, "@ts-ignore"),
+            (expect_error, 7, "@ts-expect-error"),
             (rs.clone(), 7, "eslint-disable"),
             (rs, 13, "sad:ignore"),
         ],
@@ -84,6 +88,40 @@ fn every_directive_form_is_counted_once_in_source_order() {
         sad.check.as_deref(),
         Some("comment_outside_channel"),
         "sad:ignore scopes its debt entry to exactly one check id"
+    );
+}
+
+#[test]
+fn ts_expect_error_is_suppression_debt() {
+    let file = analyze("expect_error.ts");
+    let node = file
+        .nodes
+        .iter()
+        .find(|node| node.line == 7)
+        .expect("expect_error.ts must carry the directive at line 7");
+    assert_eq!(
+        node.class,
+        AttributionClass::Suppression,
+        "@ts-expect-error is suppression, not finding-eligible prose"
+    );
+    let directive = node
+        .directive
+        .as_ref()
+        .expect("@ts-expect-error must carry a parsed directive");
+    assert!(matches!(directive.form, SuppressionForm::TsExpectError));
+    assert_eq!(
+        directive.check, None,
+        "ts-expect-error scopes to the next line, not one check id"
+    );
+
+    let debt = entries(&file);
+    assert_eq!(debt.len(), 1, "one directive is one debt entry");
+    assert_eq!(debt[0].line, 7);
+    assert!(matches!(debt[0].form, SuppressionForm::TsExpectError));
+    assert_eq!(debt[0].check, None);
+    assert!(
+        outside_channel::run(&file, &Config::default()).is_empty(),
+        "the directive node is exemption-by-debt, never a prose finding"
     );
 }
 
