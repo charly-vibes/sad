@@ -29,3 +29,9 @@ milestone, not by cadence.
   `ah check`.
 - Measurement duty recorded in [docs/src/validation.md](docs/src/validation.md)
   (first published rates + falsification rule).
+- Release pipeline: tag-triggered `v*` workflow
+  (`.github/workflows/release.yml`) builds five targets (Linux and macOS
+  x86_64+aarch64, Windows x86_64), publishes archives, `checksums.txt` and
+  `provenance.json` to the GitHub release, publishes the crate, and updates
+  the Homebrew tap and Scoop bucket manifest; the README install section now
+  covers prebuilt archives, Homebrew, Scoop and building from source.

@@ -19,6 +19,7 @@
 > · [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
 [![tracked with wai](https://img.shields.io/badge/tracked%20with-wai-blue)](https://github.com/charly-vibes/wai)
 [![CI](https://github.com/charly-vibes/sad/actions/workflows/ci.yml/badge.svg)](https://github.com/charly-vibes/sad/actions/workflows/ci.yml)
+[![Release](https://github.com/charly-vibes/sad/actions/workflows/release.yml/badge.svg)](https://github.com/charly-vibes/sad/actions/workflows/release.yml)
 
 sad is a deterministic gate on in-code prose — comments and doc strings.
 No network, no models, no randomness: same input tree, same findings.
@@ -30,7 +31,25 @@ that runs in CI and pre-commit hooks, so unexpressive code never merges.
 
 ## Install
 
-From source (no release yet):
+Prebuilt archives for Linux (x86_64, aarch64), macOS (Intel, Apple Silicon)
+and Windows (x86_64) are attached to each tagged release: `.tar.gz` on
+Unix-like systems, `.zip` on Windows, alongside `checksums.txt` and
+`provenance.json` — see the [releases page](https://github.com/charly-vibes/sad/releases).
+
+Homebrew:
+
+```bash
+brew install charly-vibes/charly/sad
+```
+
+Scoop (Windows):
+
+```powershell
+scoop bucket add charly https://github.com/charly-vibes/scoop-charly
+scoop install sad
+```
+
+From source:
 
 ```bash
 cargo install --path sad --locked
