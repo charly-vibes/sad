@@ -23,5 +23,9 @@ milestone, not by cadence.
   `sad-baseline.json`, `self-gate` recipe in `just ci`); 24 espectacular
   contracts map the EARS scenarios to tests; `just ci` runs spec
   correspondence, the pretender structural gate, the self-gate and spelling.
+- Change `specify-gate-objective` archived (2026-11-18): the EARS spec is
+  deployed at `openspec/specs/comment-gate/spec.md` and its contracts at
+  `.espectacular/comment-gate/`; `just spec-check` now runs the deployed
+  `ah check`.
 - Measurement duty recorded in [docs/src/validation.md](docs/src/validation.md)
   (first published rates + falsification rule).

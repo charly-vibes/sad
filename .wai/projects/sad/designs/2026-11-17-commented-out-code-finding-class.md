@@ -1,6 +1,6 @@
 # Commented-out code: a distinct finding class
 
-Status: design note for the deferred item in `openspec/changes/specify-gate-objective/design.md` and
+Status: design note for the deferred item in `openspec/changes/archive/2026-11-18-specify-gate-objective/design.md` and
 the proposal non-goal; implementation is a separate ticket and this note changes no spec text.
 
 **Determinism.** Every rule is a deterministic function of source text and the pinned grammar: no

@@ -18,11 +18,10 @@ for Rust, Python and TypeScript; five checks
 pre-commit hook.
 
 The **gate design** is specified — see the [Gate Model](gate-model.md). The
-EARS spec has landed
-[in the change directory](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/specs/comment-gate/spec.md)
-while the change is open, and deploys to
+EARS spec is deployed at
 [`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
-on archive. Ticket `sad-lcy` is closed. Live command surface:
+(change archived 2026-11-18, with 24 property-derived contracts under
+`.espectacular/comment-gate/`). Ticket `sad-lcy` is closed. Live command surface:
 `sad version` and `sad check [--all] [--adopt] [--config <path>] [--json]`.
 Measurement duty and first published rates: [Validation](validation.md).
 Implementation history lives in

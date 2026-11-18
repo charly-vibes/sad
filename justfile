@@ -91,17 +91,10 @@ book-serve:
 clean:
     cargo clean
 
-# Spec-test correspondence (espectacular): every scenario has a contract and
-# every contract maps to a scenario. Uses the in-flight change overlay while
-# the change is open; after archive the deployed specs are checked.
+# Spec-test correspondence (espectacular): every scenario has a deployed
+# contract and every contract maps to a scenario.
 spec-check:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    if [ -d openspec/changes/specify-gate-objective ]; then
-      ah check --changes specify-gate-objective
-    else
-      ah check
-    fi
+    ah check
 
 # Structural gate (pretender): complexity/duplication on this repo.
 structure-check:

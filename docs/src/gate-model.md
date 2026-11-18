@@ -9,14 +9,10 @@
 
 > **Status: specified 2026-11-17 (design resolved 2026-11-16); v0.1
 > implemented and dogfooded in this repository — pre-release, not yet on
-> crates.io.** The EARS spec deploys to
+> crates.io.** The EARS spec is deployed at
 > [`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
-> on archive; until then it lives
-> [in the change directory](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/specs/comment-gate/spec.md),
-> while the change is open. The decision record and evidence ledger are
-> [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/design.md),
-> while the change is open (on archive it moves with the change under
-> `openspec/changes/archive/`).
+> (change archived 2026-11-18). The decision record and evidence ledger are
+> [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md).
 > This page records the v2 model.
 
 ## Premise
@@ -182,8 +178,7 @@ resolution is file lookup only.
   (correlational only).
 
 The full ledger is in
-[`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/design.md),
-while the change is open.
+[`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md).
 
 ## Resolved decisions
 
