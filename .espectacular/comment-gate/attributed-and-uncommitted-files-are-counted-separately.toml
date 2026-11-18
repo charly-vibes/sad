@@ -1,0 +1,9 @@
+id = "attributed-and-uncommitted-files-are-counted-separately"
+description = "files_attributed, files_without_commit, and files_unattributed each count their own population."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "selection_reports_what_attribution_scope_did"}]

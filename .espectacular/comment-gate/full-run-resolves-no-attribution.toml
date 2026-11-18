@@ -1,0 +1,9 @@
+id = "full-run-resolves-no-attribution"
+description = "The three attribution counters are zero and files_selected counts every non-excluded candidate."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "selection_reports_what_attribution_scope_did"}]

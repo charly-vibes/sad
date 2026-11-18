@@ -1,0 +1,9 @@
+id = "duplicate-bodies-get-distinct-ids-and-both-are-adopted"
+description = "The report carries <base> and <base>#2, and the baseline stores both ids as separate entries."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "duplicate_prose_bodies_get_distinct_ids_and_are_adopted_separately"}]

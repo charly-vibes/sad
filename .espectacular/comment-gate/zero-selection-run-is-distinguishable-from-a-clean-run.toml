@@ -1,0 +1,9 @@
+id = "zero-selection-run-is-distinguishable-from-a-clean-run"
+description = "Stats report zero selected and a non-zero unattributed count, and text mode names the attribution scope and --all."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "text_mode_names_the_attribution_scope_when_nothing_is_selected"}]

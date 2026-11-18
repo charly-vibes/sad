@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "adopted_at": "2026-11-18T00:13:37Z",
+  "schema_version": 2,
+  "adopted_at": "2026-11-18T16:30:18Z",
   "finding_ids": [
     "sad/src/attribution.rs::MarkerMatcher::is_marker::ec5701e434f5515c",
     "sad/src/attribution.rs::parse_sad_ignore::b0b57745ebb42c53",
@@ -269,6 +269,7 @@
     "sad/tests/extract_test.rs::-::5526112e84d55015",
     "sad/tests/extract_test.rs::-::65a72903eda21875",
     "sad/tests/extract_test.rs::-::a4c45a2a42fc754b",
+    "sad/tests/extract_test.rs::-::a4c45a2a42fc754b#2",
     "sad/tests/extract_test.rs::-::ba4dc95d537ef709",
     "sad/tests/extract_test.rs::-::bb58bbac8774c67d",
     "sad/tests/extract_test.rs::-::c7fbeb073160dde7",

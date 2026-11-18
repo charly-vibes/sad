@@ -1,0 +1,9 @@
+id = "long-prose-runs-are-bounded"
+description = "A 32k-line prose run completes under the regression bound and every node is still reported."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "long_prose_runs_stay_bounded_and_keep_per_node_findings"}]

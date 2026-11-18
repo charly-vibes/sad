@@ -1,0 +1,9 @@
+id = "unique-findings-keep-their-bare-identity"
+description = "Every id is the bare <path>::<symbol-path>::<content-hash> with no discriminator."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "findings_fail_the_run_with_a_stable_id_and_remediation"}]

@@ -38,7 +38,7 @@ pub fn language_for_path(path: &Path) -> Option<Language> {
     match path.extension()?.to_str()? {
         "rs" => Some(Language::Rust),
         "py" => Some(Language::Python),
-        "ts" => Some(Language::TypeScript),
+        "ts" | "js" | "mjs" => Some(Language::TypeScript),
         _ => None,
     }
 }

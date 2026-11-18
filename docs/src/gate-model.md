@@ -118,6 +118,14 @@ miss or `[checks] commented_out_code = false` leaves the per-node
 silence by guessing. A directive scoped to `commented_out_code` is
 ordinary suppression debt and does not join a block.
 
+The predicate input is bounded: a body within 8192 bytes and 512 lines
+parses as one unit; a longer run is parsed in chunks cut at line
+boundaries with the same bounds, and the block matches when any chunk
+parses as a syntactic unit. The finding keeps the whole body, so chunking
+never changes an ID. A construct straddling a chunk boundary fails closed
+to prose, and a single line longer than the byte bound is treated as
+prose.
+
 Remediation is hardcoded: `git log -p --follow <path>` with "Delete the
 commented-out code. If it is still needed, recover it from VCS history;
 never restore it as a comment." Known false positive: a plain-comment
@@ -137,6 +145,13 @@ multi-author files break inference, and a grandfathered baseline must not
 mask new agent edits. The EARS spec's parenthetical still reads "new or
 uncommitted"; it is being tightened to new/untracked.
 
+The stats block makes the decision observable: `files_attributed` (kept by
+the trailer), `files_without_commit` (kept as new work), and
+`files_unattributed` (dropped). When a default run selects nothing but
+candidates existed, text mode names the attribution scope and the
+widening paths (`--all`, or commit with the trailer) in the same one-line
+summary — a green gate that gated nothing never reads like a clean tree.
+
 ## Remediation directives
 
 Each finding carries a hardcoded per-check template (not user-configurable)
@@ -154,10 +169,16 @@ sad refuses prose as a substitute.
 - **Stable finding IDs** — `<path>::<symbol-path>::<content-hash>`:
   survive line drift and unrelated edits; die only when the comment itself
   moves or changes. File-scoped findings (`missing_header`,
-  `suppression_cap_exceeded`) use `-` as the symbol-path.
+  `suppression_cap_exceeded`) use `-` as the symbol-path. Identical base
+  identities in one run are discriminated by an occurrence suffix
+  (`#2`, `#3`, …) in report order, so every ID is unique; the first
+  occurrence keeps the bare identity.
 - **`--adopt`** → writes `sad-baseline.json` of grandfathered IDs
   (committed). A baseline suppresses its IDs and is shrink-only: fixing
   prose makes the next run pass, while growing the baseline fails the run.
+  Schema version 2 carries the occurrence-discriminated IDs; a version-1
+  baseline still suppresses exact matches, and the adoption that rewrites
+  it may add IDs exactly once (a legacy ID set cannot be reproduced).
 - Single gate mode — boolean findings make gate+baseline equivalent to
   pretender's gate/tiered split; no warn tier.
 - The same `sad check` invocation on the same tree produces the same
@@ -181,9 +202,15 @@ sad refuses prose as a substitute.
 
 ## Languages
 
-Rust, Python, TypeScript — v1 scope, tree-sitter comment-node extraction
-with channel attribution, grammar pins inherited from pretender's
-known-good set. Rust ships first so sad gates itself.
+Rust, Python, TypeScript, and JavaScript — v1 scope, tree-sitter
+comment-node extraction with channel attribution, grammar pins inherited
+from pretender's known-good set. The gated extension set is exactly
+`.rs`, `.py`, `.ts`, `.js`, and `.mjs`; JavaScript files are parsed with
+the TypeScript frontend. Adjacent extensions the gate cannot parse
+(`.tsx`, `.mts`, `.cts`, `.jsx`) are counted in `files_unsupported` and
+named by one `unsupported_extension` envelope warning each, never dropped
+silently; JSX/TSX parsing is a separate decision. Rust ships first so sad
+gates itself.
 
 ## Boundary
 

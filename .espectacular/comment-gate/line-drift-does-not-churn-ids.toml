@@ -1,0 +1,9 @@
+id = "line-drift-does-not-churn-ids"
+description = "Ten unrelated lines inserted above a finding leave the finding's id unchanged."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "ids_survive_line_drift_within_a_duplicate_pair"}]

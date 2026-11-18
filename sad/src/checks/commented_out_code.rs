@@ -27,6 +27,15 @@ use self::predicate::is_commented_out_code;
 mod normalize;
 mod predicate;
 
+/// Largest normalized body, in bytes, fed to one predicate parse.
+///
+/// Longer runs are chunked so tree-sitter's error recovery cannot dominate a
+/// single prose run; the whole body still hashes into the finding id.
+pub const MAX_PREDICATE_BYTES: usize = 8 * 1024;
+
+/// Largest normalized body, in lines, fed to one predicate parse.
+pub const MAX_PREDICATE_LINES: usize = 512;
+
 /// Message shared by every block finding.
 ///
 /// Names the rule; never a required edit beyond deleting code that was
@@ -78,15 +87,51 @@ impl Checker {
     }
 
     /// Parse `body` with the pinned frontend and apply the static predicate.
+    ///
+    /// Bodies within both bounds parse as one unit, exactly as before. Longer
+    /// bodies are parsed chunk-wise, cut at line boundaries and packed up to
+    /// both bounds; the run matches when any chunk matches, so a dead-code
+    /// item wholly inside one chunk stays visible. A chunk boundary that
+    /// splits a construct fails closed to prose (the per-node findings still
+    /// report it), and a single line longer than the byte bound fails closed
+    /// the same way.
     fn parses_as_code(&mut self, language: Language, body: &str) -> bool {
         let Some(parser) = self.parsers[parser_slot(language)].as_mut() else {
             return false;
         };
-        let Some(tree) = parser.parse(body, None) else {
-            return false;
-        };
-        is_commented_out_code(tree.root_node(), language)
+        if body.len() <= MAX_PREDICATE_BYTES && body.lines().count() <= MAX_PREDICATE_LINES {
+            return parses_body(parser, language, body);
+        }
+        let mut chunk = String::new();
+        let mut chunk_lines = 0usize;
+        for line in body.lines() {
+            if line.len() > MAX_PREDICATE_BYTES {
+                return false;
+            }
+            if chunk_lines > 0
+                && (chunk.len() + line.len() + 1 > MAX_PREDICATE_BYTES
+                    || chunk_lines == MAX_PREDICATE_LINES)
+            {
+                if parses_body(parser, language, &chunk) {
+                    return true;
+                }
+                chunk.clear();
+                chunk_lines = 0;
+            }
+            chunk.push_str(line);
+            chunk.push('\n');
+            chunk_lines += 1;
+        }
+        !chunk.is_empty() && parses_body(parser, language, &chunk)
     }
+}
+
+/// Parse one bounded input and apply the static predicate.
+fn parses_body(parser: &mut Parser, language: Language, body: &str) -> bool {
+    let Some(tree) = parser.parse(body, None) else {
+        return false;
+    };
+    is_commented_out_code(tree.root_node(), language)
 }
 
 impl Default for Checker {

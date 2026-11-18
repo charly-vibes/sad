@@ -194,3 +194,46 @@ fn hooks_and_ci_see_identical_results() {
         "data must match across invocations: hook={hook} ci={ci}"
     );
 }
+
+#[test]
+fn text_mode_names_the_attribution_scope_when_nothing_is_selected() {
+    let repo = TempRepo::new("text-scope-zero");
+    repo.write("src/lib.rs", "fn main() {}\n");
+    git(repo.path(), &["init", "--quiet"]);
+    commit_file(repo.path(), "src/lib.rs", "add legacy file", None);
+    repo.write(
+        "src/lib.rs",
+        "// narration added in an uncommitted edit\nfn main() {}\n",
+    );
+
+    let scoped = run_sad(repo.path(), &["check"]);
+    assert_eq!(scoped.status.code(), Some(0));
+    let scoped_stdout = String::from_utf8(scoped.stdout).expect("text stdout is UTF-8");
+    assert_eq!(
+        scoped_stdout.trim_end().lines().count(),
+        1,
+        "the hint stays on the text contract's one line: {scoped_stdout}"
+    );
+    assert!(
+        scoped_stdout.contains("0 findings in 0 files"),
+        "the counts are unchanged: {scoped_stdout}"
+    );
+    assert!(
+        scoped_stdout.contains("attribution"),
+        "text mode must explain why nothing was gated: {scoped_stdout}"
+    );
+    assert!(
+        scoped_stdout.contains("sad check --all"),
+        "text mode must name the widening path: {scoped_stdout}"
+    );
+
+    let clean = TempRepo::new("text-scope-clean");
+    clean.write("src/lib.rs", "//! Purpose: stay clean.\n//! Responsibilities: none.\n//! Rationale: none.\nfn main() {}\n");
+    let clean_run = run_sad(clean.path(), &["check"]);
+    assert_eq!(clean_run.status.code(), Some(0));
+    let clean_stdout = String::from_utf8(clean_run.stdout).expect("text stdout is UTF-8");
+    assert!(
+        !clean_stdout.contains("attribution"),
+        "a genuine clean run carries no scope hint: {clean_stdout}"
+    );
+}

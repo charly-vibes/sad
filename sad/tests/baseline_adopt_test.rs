@@ -37,7 +37,7 @@ fn adopt_writes_the_baseline_contract_and_exits_zero_with_findings() {
 
     let baseline = repo.read_baseline();
     assert_eq!(
-        baseline["schema_version"], 1,
+        baseline["schema_version"], 2,
         "baseline schema version: {baseline}"
     );
 
@@ -144,5 +144,136 @@ fn adoption_is_deterministic_for_an_unchanged_tree() {
         repo.read_baseline_text(),
         first_text,
         "an unchanged id set must keep the document byte-stable, adopted_at included"
+    );
+}
+
+const DUPLICATE_PROSE: &str = "\
+pub fn total() -> i32 {
+    // keep the running total in sync with the ledger
+    let mut sum = 0;
+    // keep the running total in sync with the ledger
+    sum += 1;
+    sum
+}
+";
+
+/// One prose comment, distinct from [`DUPLICATE_PROSE`]'s body.
+const SINGLE_PROSE: &str = "\
+pub fn total() -> i32 {
+    // add one to the running total
+    1
+}
+";
+
+#[test]
+fn duplicate_prose_bodies_get_distinct_ids_and_are_adopted_separately() {
+    let repo = TempRepo::new("duplicate-ids");
+    repo.write("src/dup.rs", DUPLICATE_PROSE);
+
+    let (code, before) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 1, "prose fails the run: {before}");
+    let mut ids = finding_ids(&before);
+    assert_eq!(ids.len(), 2, "two nodes are two findings: {before}");
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 2, "identical bodies must not share an id");
+
+    let (code, after) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 1);
+    let ordered = finding_ids(&after);
+    assert_eq!(
+        ordered.len(),
+        2,
+        "the duplicate pair keeps both findings: {after}"
+    );
+    assert_eq!(
+        ordered[1],
+        format!("{}#2", ordered[0]),
+        "the second occurrence carries the #2 discriminator: {ordered:?}"
+    );
+
+    let (code, envelope) = run_adopt(repo.path());
+    assert_eq!(code, 0, "adoption exits 0: {envelope}");
+    let adopted = baseline_ids(&repo.read_baseline());
+    assert_eq!(
+        adopted.len(),
+        2,
+        "both occurrences occupy baseline entries: {adopted:?}"
+    );
+    assert!(adopted.contains(&ordered[0]), "{adopted:?}");
+    assert!(adopted.contains(&ordered[1]), "{adopted:?}");
+
+    let (code, suppressed) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 0, "both are grandfathered: {suppressed}");
+    assert_eq!(suppressed["data"]["stats"]["findings_suppressed"], 2);
+}
+
+#[test]
+fn a_version_one_baseline_suppresses_then_migrates_once() {
+    let repo = TempRepo::new("baseline-migration");
+    repo.write("src/lib.rs", SINGLE_PROSE);
+
+    let (_, before) = run_json(repo.path(), &["check", "--all", "--json"]);
+    let original_ids = finding_ids(&before);
+    assert_eq!(original_ids.len(), 1, "one prose node: {before}");
+    repo.write_baseline(&serde_json::json!({
+        "schema_version": 1,
+        "adopted_at": "2026-01-01T00:00:00Z",
+        "finding_ids": original_ids,
+    }));
+
+    let (code, plain) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 0, "a v1 baseline still suppresses: {plain}");
+    assert_eq!(plain["data"]["stats"]["findings_suppressed"], 1);
+
+    repo.write("src/lib.rs", DUPLICATE_PROSE);
+    let (code, debt) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(
+        code, 1,
+        "the new occurrence reports under the discriminator: {debt}"
+    );
+
+    let (code, migrated) = run_adopt(repo.path());
+    assert_eq!(
+        code, 0,
+        "a version-1 baseline may add ids exactly once: {migrated}"
+    );
+    let baseline = repo.read_baseline();
+    assert_eq!(
+        baseline["schema_version"], 2,
+        "adoption migrates the document: {baseline}"
+    );
+    let migrated_ids = baseline_ids(&baseline);
+    assert_eq!(
+        migrated_ids.len(),
+        2,
+        "both occurrences are adopted by the migration: {migrated_ids:?}"
+    );
+    assert!(baseline_ids(&repo.read_baseline()).len() > original_ids.len());
+
+    repo.write("src/extra.rs", SINGLE_PROSE);
+    let (code, refused) = run_adopt(repo.path());
+    assert_eq!(code, 1, "post-migration growth is refused: {refused}");
+    assert_names_baseline_growth(&refused);
+}
+
+#[test]
+fn ids_survive_line_drift_within_a_duplicate_pair() {
+    let repo = TempRepo::new("line-drift");
+    repo.write("src/dup.rs", DUPLICATE_PROSE);
+    let (_, first) = run_json(repo.path(), &["check", "--all", "--json"]);
+    let first_ids = finding_ids(&first);
+    assert_eq!(first_ids.len(), 2, "{first}");
+
+    repo.write(
+        "src/dup.rs",
+        &format!("\n\n\n\n\n\n\n\n\n\n{DUPLICATE_PROSE}"),
+    );
+    let (_, second) = run_json(repo.path(), &["check", "--all", "--json"]);
+
+    assert_eq!(
+        finding_ids(&second),
+        first_ids,
+        "inserted lines must not churn finding ids: {second}"
     );
 }

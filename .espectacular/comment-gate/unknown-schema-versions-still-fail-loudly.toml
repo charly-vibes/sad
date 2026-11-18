@@ -1,0 +1,9 @@
+id = "unknown-schema-versions-still-fail-loudly"
+description = "The run fails with a baseline_error naming the path and the version, and rewrites nothing."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "an_unsupported_schema_version_is_a_parse_error"}]

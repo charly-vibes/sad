@@ -15,7 +15,7 @@
 use std::fmt;
 use std::path::Path;
 
-use genesis::envelope::{Envelope, EnvelopeKind};
+use genesis::envelope::{Envelope, EnvelopeKind, Warning};
 use serde::Serialize;
 
 use crate::baseline::BaselineError;
@@ -31,6 +31,11 @@ pub struct CheckReport {
     pub findings: Vec<Finding>,
     pub suppression_debt: Vec<SuppressionEntry>,
     pub stats: CheckStats,
+    /// Envelope-level warnings the pipeline collected (unsupported
+    /// extensions). Lifted into `Envelope::warnings` by
+    /// [`check_envelope`]; never serialized inside the data payload.
+    #[serde(skip)]
+    pub warnings: Vec<Warning>,
 }
 
 /// File-level counts from discovery and selection, before extraction.
@@ -47,6 +52,14 @@ pub struct FileCounts {
     pub skipped: usize,
     /// Discovered files an `exclude` glob dropped.
     pub excluded: usize,
+    /// Selected because the governing revision carries the trailer.
+    pub attributed: usize,
+    /// Selected because git has no governing revision for the path.
+    pub without_commit: usize,
+    /// Candidates dropped because the governing revision lacks the trailer.
+    pub unattributed: usize,
+    /// Discovered files whose extension the gate cannot parse.
+    pub unsupported: usize,
 }
 
 /// Counts describing what one gate run looked at.
@@ -66,6 +79,15 @@ pub struct CheckStats {
     pub files_selected: usize,
     /// Selected files skipped as unreadable or not UTF-8.
     pub files_skipped: usize,
+    /// Candidates selected because their governing revision carries the
+    /// configured attribution trailer.
+    pub files_attributed: usize,
+    /// Candidates selected because git has no governing revision for them.
+    pub files_without_commit: usize,
+    /// Candidates dropped because their governing revision lacks the trailer.
+    pub files_unattributed: usize,
+    /// Discovered files skipped because their extension is unsupported.
+    pub files_unsupported: usize,
     /// Non-exempt files analysed successfully — the channel denominator.
     pub files_analyzed: usize,
     /// Analysed files the extractor marked exempt.
@@ -99,6 +121,10 @@ impl CheckStats {
             files_excluded: files.excluded,
             files_selected: files.selected,
             files_skipped: files.skipped,
+            files_attributed: files.attributed,
+            files_without_commit: files.without_commit,
+            files_unattributed: files.unattributed,
+            files_unsupported: files.unsupported,
             files_analyzed: analyzed.len() - summary.files_exempt,
             files_exempt: summary.files_exempt,
             exempt_nodes: summary.nodes_exempt,
@@ -183,13 +209,14 @@ pub fn growth_message(path: &Path, ids: &[String]) -> String {
 ///
 /// No findings is a pass; any finding is a fail, even though the payload is a
 /// successful command result rather than an error envelope.
-pub fn check_envelope(report: CheckReport) -> Envelope<CheckReport> {
+pub fn check_envelope(mut report: CheckReport) -> Envelope<CheckReport> {
     let ok = report.findings.is_empty();
+    let warnings = std::mem::take(&mut report.warnings);
     let mut envelope = Envelope::success(
         env!("CARGO_PKG_VERSION"),
         EnvelopeKind::Check,
         report,
-        vec![],
+        warnings,
         vec![],
     );
     envelope.ok = ok;

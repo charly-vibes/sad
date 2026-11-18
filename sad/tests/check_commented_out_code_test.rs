@@ -10,9 +10,14 @@
 
 mod support;
 
-use sad::checks::{commented_out_code, outside_channel, suppression};
+use std::time::{Duration, Instant};
+
+use sad::checks::commented_out_code::{self, MAX_PREDICATE_BYTES, MAX_PREDICATE_LINES};
+use sad::checks::{outside_channel, suppression};
 use sad::config::Config;
-use sad::model::{AttributionClass, FindingKind, finding_id};
+use sad::model::{
+    AnalyzedFile, AttributionClass, CommentKind, CommentNode, FindingKind, Language, finding_id,
+};
 
 use support::commented_out_code::*;
 
@@ -275,5 +280,94 @@ fn block_id_is_stable_under_insertion_and_sensitive_to_body_edits() {
     assert_ne!(
         base_dead[0].id, edited_dead[0].id,
         "a one-character body edit must change the id"
+    );
+}
+
+#[test]
+fn long_prose_runs_stay_bounded_and_keep_per_node_findings() {
+    let cfg = Config::default();
+    let nodes: Vec<CommentNode> = (0..32_000)
+        .map(|index| CommentNode {
+            line: index + 2,
+            kind: CommentKind::Line,
+            class: AttributionClass::Prose,
+            symbol_path: "outer".to_string(),
+            body: format!("line {index}"),
+            text: format!("// line {index}"),
+            directive: None,
+        })
+        .collect();
+    let file = AnalyzedFile {
+        path: "long_prose.rs".to_string(),
+        language: Language::Rust,
+        nodes,
+        exempt: false,
+        header: false,
+    };
+
+    let started = Instant::now();
+    let (dead, prose) = split(&file, &cfg);
+    let elapsed = started.elapsed();
+
+    assert!(dead.is_empty(), "plain prose never matches the predicate");
+    assert_eq!(
+        prose.len(),
+        32_000,
+        "every prose node stays reported under the bound"
+    );
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "a 32k-line prose run must not hit the superlinear cliff: {elapsed:?}"
+    );
+}
+
+#[test]
+fn a_code_chunk_past_the_bound_still_yields_one_block() {
+    let cfg = Config::default();
+    let filler_body_len = 63;
+    let lines_per_chunk = MAX_PREDICATE_BYTES / (filler_body_len + 1);
+    assert_eq!(
+        lines_per_chunk * (filler_body_len + 1),
+        MAX_PREDICATE_BYTES,
+        "the filler must divide the byte bound exactly"
+    );
+    let filler = format!("    // {}\n", "a".repeat(filler_body_len));
+    let mut source = String::from("fn outer() {\n");
+    for _ in 0..lines_per_chunk * 2 {
+        source.push_str(&filler);
+    }
+    source.push_str("    // fn late() {\n");
+    source.push_str("    //     let x = 1;\n");
+    source.push_str("    //     x\n");
+    source.push_str("    // }\n");
+    source.push_str("}\n");
+    assert!(
+        source.len() > MAX_PREDICATE_BYTES,
+        "the fixture must exceed the single-parse bound"
+    );
+    assert!(
+        lines_per_chunk * 2 + 4 <= MAX_PREDICATE_LINES,
+        "the line bound must not be the active one"
+    );
+    let file = source_at("long_dead_code.rs", &source);
+
+    let (dead, prose) = split(&file, &cfg);
+
+    assert_eq!(
+        dead.len(),
+        1,
+        "a dead-code item inside one chunk still matches the block: {dead:?}"
+    );
+    assert_eq!(
+        prose.len(),
+        0,
+        "the matched block consumes every member node: {prose:?}"
+    );
+    assert!(
+        dead[0]
+            .text
+            .ends_with("fn late() {\n    let x = 1;\n    x\n}"),
+        "the finding hashes the whole run body: {:?}",
+        dead[0].text
     );
 }

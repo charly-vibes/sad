@@ -1,0 +1,9 @@
+id = "unsupported-adjacent-extensions-are-visible"
+description = "Each unsupported file is counted in files_unsupported and named by one unsupported_extension warning."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "unsupported_adjacent_extensions_are_named_in_warnings"}]

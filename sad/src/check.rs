@@ -22,11 +22,13 @@
 //! `sad-baseline.json` and delegates to [`adopt_baseline`] or
 //! [`suppress_baselined`].
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
 use crate::baseline::{self, Baseline};
+use genesis::envelope::Warning;
+
 use crate::checks::{
     RepoContext, commented_out_code, doc_cap, header, marker, outside_channel, suppression,
 };
@@ -66,12 +68,17 @@ pub fn run(repo: &Path, cfg: &Config, all: bool, adopt: bool) -> Result<CheckRep
         selected: selection.selected.len(),
         skipped,
         excluded: selection.excluded,
+        attributed: selection.attributed,
+        without_commit: selection.without_commit,
+        unattributed: selection.unattributed,
+        unsupported: selection.unsupported.len(),
     };
     let stats = CheckStats::of(&analyzed, &debt, &findings, files);
     let report = CheckReport {
         findings,
         suppression_debt: debt,
         stats,
+        warnings: unsupported_warnings(&selection.unsupported),
     };
     apply_baseline(repo, report, adopt)
 }
@@ -84,23 +91,56 @@ struct Selection {
     excluded: usize,
     /// Files that survived exclusion and commit scope, in discovery order.
     selected: Vec<String>,
+    attributed: usize,
+    without_commit: usize,
+    unattributed: usize,
+    unsupported: Vec<String>,
 }
 
 /// Files this run analyses: the discovered tree minus `exclude` globs, scoped
 /// to the commit-attribution range unless `all` bypasses it.
 fn select_files(repo: &Path, cfg: &Config, all: bool) -> Selection {
-    let discovered = discover_files(repo);
+    let discovery = discover_files(repo);
+    let discovered = discovery.files;
     let excluded_count = discovered.len();
     let candidates: Vec<String> = discovered
         .into_iter()
         .filter(|file| !exemptions::is_excluded(file, cfg))
         .collect();
     let excluded = excluded_count - candidates.len();
+    let scoped = scope::select_in_scope(repo, &candidates, cfg, all);
     Selection {
         discovered: excluded_count,
         excluded,
-        selected: scope::select(repo, &candidates, cfg, all),
+        selected: scoped.files,
+        attributed: scoped.attributed,
+        without_commit: scoped.without_commit,
+        unattributed: scoped.unattributed,
+        unsupported: discovery.unsupported,
     }
+}
+
+/// One envelope warning per file whose extension the gate cannot parse.
+///
+/// Discovery keeps these paths instead of dropping them so the language
+/// boundary is visible; the warning names the file and the supported set.
+fn unsupported_warnings(paths: &[String]) -> Vec<Warning> {
+    paths
+        .iter()
+        .map(|path| Warning {
+            rule_name: "unsupported_extension".to_string(),
+            entity_id: Some(path.clone()),
+            message: format!(
+                "`{path}` has an extension the gate cannot parse; it was skipped, so its \
+                 comments were not judged (supported extensions: .rs, .py, .ts, .js, .mjs)"
+            ),
+            suggested_remediation: Some(
+                "Rename to a supported extension (.rs, .py, .ts, .js, .mjs) when the file's \
+                 comments must be gated; JSX/TSX and .mts/.cts support is out of scope in v1."
+                    .to_string(),
+            ),
+        })
+        .collect()
 }
 
 /// Extract every selected file; unreadable or non-UTF-8 sources are skipped
@@ -154,7 +194,26 @@ fn collect_findings(
             .then(left.line.cmp(&right.line))
             .then(left.check.id().cmp(right.check.id()))
     });
+    disambiguate_duplicate_ids(&mut findings);
     findings
+}
+
+/// Make every finding id unique within the report.
+///
+/// The base identity (`path::symbol-path::content-hash`) is shared by
+/// findings whose nodes are identical in every line-independent respect, so
+/// a second and later occurrence in report order appends `#<n>`. Unique
+/// findings keep their bare identity, which keeps every existing baseline
+/// entry valid; the discriminator never depends on line numbers.
+fn disambiguate_duplicate_ids(findings: &mut [Finding]) {
+    let mut occurrences: BTreeMap<String, usize> = BTreeMap::new();
+    for finding in findings.iter_mut() {
+        let count = occurrences.entry(finding.id.clone()).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            finding.id = format!("{}#{count}", finding.id);
+        }
+    }
 }
 
 /// Load `sad-baseline.json` and apply adoption or suppression, then publish
@@ -203,7 +262,9 @@ fn adopt_baseline(
     mut report: CheckReport,
     current_ids: &[String],
 ) -> Result<CheckReport, GateFailure> {
-    if let Some(existing) = existing {
+    if let Some(existing) = existing
+        && !existing.needs_migration()
+    {
         let growth = absent_ids(current_ids, &existing.finding_ids);
         if !growth.is_empty() {
             return Err(GateFailure::Growth {

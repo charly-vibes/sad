@@ -11,7 +11,9 @@
 //! must be loud: silently treating a corrupt file as empty would fail open and
 //! hide every finding the team intended to track. Normalising ids at both
 //! boundaries keeps the id set stable across hand edits and repeated adoption,
-//! so adoption diffs stay reviewable.
+//! so adoption diffs stay reviewable. Schema version 1 predates the finding
+//! occurrence discriminator and is still read; the one adoption that rewrites
+//! it may add ids, because a legacy id set cannot be reproduced.
 
 use std::fmt;
 use std::fs;
@@ -25,13 +27,21 @@ use serde::{Deserialize, Serialize};
 pub const BASELINE_FILE: &str = "sad-baseline.json";
 
 /// Schema version of the persisted baseline document.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// Version 2 is the finding-identity scheme that appends `#<n>` to repeated
+/// base identities. Version 1 is still read so a pre-discriminator baseline
+/// keeps suppressing exact matches; the next adoption migrates it.
+pub const SCHEMA_VERSION: u32 = 2;
+
+/// Older schema versions a load accepts, for migration on the next adoption.
+const LEGACY_SCHEMA_VERSIONS: [u32; 1] = [1];
 
 /// The set of grandfathered finding ids a repository has adopted.
 ///
 /// Ids use the same stable `<path>::<symbol-path>::<content-hash>` scheme as
-/// findings, so unrelated edits do not churn the baseline. They are persisted
-/// sorted and deduped for stable diffs.
+/// findings (plus the occurrence discriminator when a base identity repeats),
+/// so unrelated edits do not churn the baseline. They are persisted sorted
+/// and deduped for stable diffs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Baseline {
     pub schema_version: u32,
@@ -77,7 +87,9 @@ impl Baseline {
                 path: path.to_path_buf(),
                 message: err.to_string(),
             })?;
-        if baseline.schema_version != SCHEMA_VERSION {
+        if baseline.schema_version != SCHEMA_VERSION
+            && !LEGACY_SCHEMA_VERSIONS.contains(&baseline.schema_version)
+        {
             return Err(BaselineError::Parse {
                 path: path.to_path_buf(),
                 message: format!(
@@ -90,6 +102,10 @@ impl Baseline {
         // gate semantics or the next persisted document.
         baseline.finding_ids = normalize(baseline.finding_ids);
         Ok(Some(baseline))
+    }
+
+    pub fn needs_migration(&self) -> bool {
+        self.schema_version != SCHEMA_VERSION
     }
 
     /// Write a refreshed baseline at `path` from `finding_ids`.
@@ -332,16 +348,35 @@ mod tests {
         let path = root.join(BASELINE_FILE);
         fs::write(
             &path,
-            r#"{"schema_version":2,"adopted_at":"2026-01-01T00:00:00Z","finding_ids":[]}"#,
+            r#"{"schema_version":3,"adopted_at":"2026-01-01T00:00:00Z","finding_ids":[]}"#,
         )
         .expect("fixture is written");
         let error = Baseline::load(&path).expect_err("a future schema must fail");
         let message = error.to_string();
         assert!(message.contains(BASELINE_FILE), "names the path: {message}");
         assert!(
-            message.contains("schema_version 2"),
+            message.contains("schema_version 3"),
             "names the version: {message}"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_version_one_baseline_loads_and_asks_for_migration() {
+        let root = std::env::temp_dir().join(format!("sad-baseline-legacy-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("fixture tree is created");
+        let path = root.join(BASELINE_FILE);
+        fs::write(
+            &path,
+            r#"{"schema_version":1,"adopted_at":"2026-01-01T00:00:00Z","finding_ids":["a"]}"#,
+        )
+        .expect("fixture is written");
+        let loaded = Baseline::load(&path)
+            .expect("a legacy baseline loads")
+            .expect("baseline is present");
+        assert_eq!(loaded.schema_version, 1);
+        assert!(loaded.needs_migration());
         let _ = fs::remove_dir_all(&root);
     }
 }

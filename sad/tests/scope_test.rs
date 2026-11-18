@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sad::config::Config;
-use sad::scope::{governing_revision, has_agent_trailer, select};
+use sad::scope::{governing_revision, has_agent_trailer, select, select_in_scope};
 
 static NEXT_REPO: AtomicUsize = AtomicUsize::new(0);
 
@@ -329,5 +329,39 @@ fn configured_trailer_override_replaces_the_default_key() {
         select(repo.path(), &both, &override_cfg, false),
         paths(&["session.rs"]),
         "only commits with the configured Session trailer are in scope"
+    );
+}
+
+#[test]
+fn selection_reports_what_attribution_scope_did() {
+    let repo = Repo::init("counts");
+    repo.write_file("legacy.rs", "// legacy prose\n");
+    repo.commit("add legacy file");
+    repo.write_file("agent.rs", "// agent prose\n");
+    repo.commit("add agent file\n\nAssisted-by: Claude");
+    repo.write_file("untracked.rs", "// fresh agent prose\n");
+
+    let cfg = Config::default();
+    let candidates = paths(&["legacy.rs", "agent.rs", "untracked.rs"]);
+    let scoped = select_in_scope(repo.path(), &candidates, &cfg, false);
+
+    assert_eq!(
+        scoped.files,
+        paths(&["agent.rs", "untracked.rs"]),
+        "selection itself must not change"
+    );
+    assert_eq!(scoped.attributed, 1, "the trailer-attributed file");
+    assert_eq!(scoped.without_commit, 1, "the never-committed file");
+    assert_eq!(scoped.unattributed, 1, "the legacy file");
+
+    let full = select_in_scope(repo.path(), &candidates, &cfg, true);
+    assert_eq!(
+        full.files, candidates,
+        "a full run keeps every candidate in input order"
+    );
+    assert_eq!(
+        (full.attributed, full.without_commit, full.unattributed),
+        (0, 0, 0),
+        "a full run resolves no attribution"
     );
 }

@@ -1,0 +1,9 @@
+id = "javascript-sources-are-gated"
+description = "JavaScript files are discovered, parsed with the TypeScript frontend, and their prose is reported."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "javascript_sources_are_gated_through_the_typescript_frontend"}]

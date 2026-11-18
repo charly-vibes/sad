@@ -26,6 +26,10 @@
 //! - Repository-level facts are resolved once per selection: the shallow
 //!   probe runs once and each revision's trailer verdict is memoised, so a
 //!   commit shared by many files is never re-read.
+//! - Selection reports how each candidate was classified (attributed, no
+//!   governing commit, unattributed) so an empty scope is explainable rather
+//!   than indistinguishable from a clean tree; the counters never influence
+//!   which files are kept.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -192,23 +196,58 @@ pub fn governing_revision(repo: &Path, rel_path: &str) -> Option<String> {
 /// selection: many files commonly share one governing commit, and the shallow
 /// probe must not run per file.
 pub fn select(repo: &Path, files: &[String], cfg: &Config, all: bool) -> Vec<String> {
+    select_in_scope(repo, files, cfg, all).files
+}
+
+/// What commit-attribution scope did with a candidate list.
+///
+/// The counts exist for observability only: `files` is exactly what
+/// [`select`] returns. A full run resolves no attribution, so its three
+/// counters are zero and every candidate is selected.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScopeSelection {
+    /// Candidates kept for analysis, in input order.
+    pub files: Vec<String>,
+    /// Kept because the governing revision carries the configured trailer.
+    pub attributed: usize,
+    /// Kept because git has no governing revision for the path.
+    pub without_commit: usize,
+    /// Dropped because the governing revision lacks the trailer.
+    pub unattributed: usize,
+}
+
+pub fn select_in_scope(repo: &Path, files: &[String], cfg: &Config, all: bool) -> ScopeSelection {
     if all {
-        return files.to_vec();
+        return ScopeSelection {
+            files: files.to_vec(),
+            ..ScopeSelection::default()
+        };
     }
 
     let trailer = cfg.attribution.trailer.as_str();
     let shallow = is_shallow_repository(repo);
     let mut verdicts: BTreeMap<String, bool> = BTreeMap::new();
-    files
-        .iter()
-        .filter(|file| match governing_revision(repo, file) {
-            None => true,
-            Some(revision) => *verdicts
-                .entry(revision.clone())
-                .or_insert_with(|| governing_commit_has_trailer(repo, &revision, trailer, shallow)),
-        })
-        .cloned()
-        .collect()
+    let mut selection = ScopeSelection::default();
+    for file in files {
+        match governing_revision(repo, file) {
+            None => {
+                selection.files.push(file.clone());
+                selection.without_commit += 1;
+            }
+            Some(revision) => {
+                let attributed = *verdicts.entry(revision.clone()).or_insert_with(|| {
+                    governing_commit_has_trailer(repo, &revision, trailer, shallow)
+                });
+                if attributed {
+                    selection.files.push(file.clone());
+                    selection.attributed += 1;
+                } else {
+                    selection.unattributed += 1;
+                }
+            }
+        }
+    }
+    selection
 }
 
 /// Whether the full message of `revision` carries `trailer`; any failure to

@@ -99,6 +99,10 @@ fn stats_shape_reports_every_class() {
         "files_excluded",
         "files_selected",
         "files_skipped",
+        "files_attributed",
+        "files_without_commit",
+        "files_unattributed",
+        "files_unsupported",
         "files_analyzed",
         "files_exempt",
         "exempt_nodes",
@@ -121,6 +125,13 @@ fn stats_shape_reports_every_class() {
     assert_eq!(stats["files_excluded"], 0usize);
     assert_eq!(stats["files_selected"], 1usize);
     assert_eq!(stats["files_skipped"], 0usize);
+    assert_eq!(stats["files_attributed"], 0usize);
+    assert_eq!(
+        stats["files_without_commit"], 1usize,
+        "an uncommitted fixture has no governing revision: {stats}"
+    );
+    assert_eq!(stats["files_unattributed"], 0usize);
+    assert_eq!(stats["files_unsupported"], 0usize);
     assert_eq!(stats["files_analyzed"], 1usize);
     assert_eq!(stats["files_exempt"], 0usize);
     assert_eq!(stats["exempt_nodes"], 1usize);
@@ -189,4 +200,128 @@ fn untracked_tool_trees_are_never_walked() {
     );
     assert_eq!(stats["files_analyzed"], 0usize, "{stats}");
     assert_eq!(stats["files_skipped"], 0usize, "{stats}");
+}
+
+#[test]
+fn scope_counts_explain_a_zero_selection_run() {
+    let repo = TempRepo::new("scope-zero");
+    repo.copy_fixture("plain.rs", "src/lib.rs");
+    git(repo.path(), &["init", "--quiet"]);
+    commit_file(repo.path(), "src/lib.rs", "add legacy file", None);
+
+    repo.write("src/lib.rs", "// ONLY an uncommitted edit\nfn main() {}\n");
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--json"]);
+    assert_eq!(code, 0, "attribution scope is spec-conforming: {envelope}");
+    let stats = &envelope["data"]["stats"];
+    assert_eq!(stats["files_discovered"], 1usize, "{stats}");
+    assert_eq!(
+        stats["files_selected"], 0usize,
+        "no governing commit carries the trailer: {stats}"
+    );
+    assert_eq!(stats["files_analyzed"], 0usize, "{stats}");
+    assert_eq!(stats["files_attributed"], 0usize, "{stats}");
+    assert_eq!(stats["files_without_commit"], 0usize, "{stats}");
+    assert_eq!(
+        stats["files_unattributed"], 1usize,
+        "the skipped legacy file is counted: {stats}"
+    );
+
+    let (all_code, all) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(all_code, 1, "the uncommitted narration is a finding: {all}");
+    assert_eq!(
+        all["data"]["stats"]["files_selected"], 1usize,
+        "--all widens scope: {all}"
+    );
+}
+
+#[test]
+fn javascript_sources_are_gated_through_the_typescript_frontend() {
+    let repo = TempRepo::new("javascript");
+    repo.write(
+        "src/app.js",
+        "export function bump(counter) {\n    // increment the counter\n    return counter + 1;\n}\n",
+    );
+    repo.write(
+        "src/mod.mjs",
+        "export function reset(state) {\n    // clear every field before reuse\n    state.value = 0;\n}\n",
+    );
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+
+    assert_eq!(code, 1, "prose in JavaScript fails the run: {envelope}");
+    let reported = reported_findings(&envelope);
+    let mut paths: Vec<&str> = reported
+        .iter()
+        .map(|finding| finding["path"].as_str().expect("finding path"))
+        .collect();
+    paths.sort();
+    assert_eq!(
+        paths,
+        vec!["src/app.js", "src/mod.mjs"],
+        "both JavaScript extensions are analysed: {envelope}"
+    );
+    assert!(
+        reported
+            .iter()
+            .all(|finding| finding["check"] == "comment_outside_channel"),
+        "JavaScript prose is an outside-channel finding: {envelope}"
+    );
+    assert_eq!(
+        envelope["data"]["stats"]["files_analyzed"], 2usize,
+        "both files reach the analyzer: {envelope}"
+    );
+}
+
+#[test]
+fn unsupported_adjacent_extensions_are_named_in_warnings() {
+    let repo = TempRepo::new("unsupported-extensions");
+    for name in ["a.tsx", "b.mts", "c.cts", "d.jsx"] {
+        repo.write(
+            &format!("src/{name}"),
+            "export const value = () => {\n    // this narration must never be silent\n    1;\n};\n",
+        );
+    }
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+
+    assert_eq!(
+        code, 0,
+        "unsupported extensions yield warnings, not findings: {envelope}"
+    );
+    assert!(
+        reported_findings(&envelope).is_empty(),
+        "the gate has no findings for files it cannot parse: {envelope}"
+    );
+    assert_eq!(
+        envelope["data"]["stats"]["files_unsupported"], 4usize,
+        "every unsupported file is counted: {envelope}"
+    );
+    let warnings = envelope["warnings"]
+        .as_array()
+        .unwrap_or_else(|| panic!("the envelope must carry warnings: {envelope}"));
+    let mut paths: Vec<&str> = warnings
+        .iter()
+        .map(|warning| {
+            assert_eq!(
+                warning["rule_name"], "unsupported_extension",
+                "warnings name the discovery rule: {warning}"
+            );
+            warning["entity_id"]
+                .as_str()
+                .unwrap_or_else(|| panic!("warning names the path: {warning}"))
+        })
+        .collect();
+    paths.sort();
+    assert_eq!(
+        paths,
+        vec!["src/a.tsx", "src/b.mts", "src/c.cts", "src/d.jsx"],
+        "each skipped extension is named: {envelope}"
+    );
+    assert!(
+        warnings.iter().all(|warning| warning["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("supported"))),
+        "the message states the boundary: {envelope}"
+    );
 }

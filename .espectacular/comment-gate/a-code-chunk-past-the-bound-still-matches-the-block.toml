@@ -1,0 +1,9 @@
+id = "a-code-chunk-past-the-bound-still-matches-the-block"
+description = "One commented_out_code finding is emitted for the whole run with the full-body hash."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_code_chunk_past_the_bound_still_yields_one_block"}]

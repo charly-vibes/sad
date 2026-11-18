@@ -1,0 +1,9 @@
+id = "runs-within-the-bound-are-unchanged"
+description = "A run within the bound parses as one unit and produces exactly the un-chunked findings."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "mixed_file_emits_block_findings_and_per_node_prose"}]

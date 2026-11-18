@@ -8,7 +8,9 @@
 //! (callers check `ok` first); Invariant 3.2.5 forbids emitting an error
 //! without non-empty remediation, so every error path carries a fix hint.
 //! The tool is a deterministic gate: no network, no models, no randomness —
-//! same input tree, same findings.
+//! same input tree, same findings. Text mode also explains an empty
+//! attribution scope, so a green gate that gated nothing never reads like a
+//! clean tree.
 
 use std::path::{Path, PathBuf};
 
@@ -322,6 +324,16 @@ fn check_text(v: &serde_json::Value) -> String {
     if let Some(brief) = first_finding_brief(&v["data"]["findings"]) {
         line.push_str("; ");
         line.push_str(&brief);
+    }
+    let selected = stats["files_selected"].as_u64().unwrap_or(files);
+    let unattributed = stats["files_unattributed"].as_u64().unwrap_or(0);
+    if selected == 0 && unattributed > 0 {
+        line.push_str(&format!(
+            "; attribution scope excluded {} {}: commit with the configured trailer or run \
+             `sad check --all`",
+            unattributed,
+            plural(unattributed, "file"),
+        ));
     }
     line.push('\n');
     line
