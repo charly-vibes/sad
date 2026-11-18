@@ -24,6 +24,9 @@ docs/src/release.md
 # pretender runtime cache
 .pretender/
 
+# turu (whisper) local knowledge store
+.whisper/
+
 # tool report output
 *.report.html
 
