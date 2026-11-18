@@ -10,11 +10,22 @@ mod support;
 
 use support::envelope::*;
 
+const NARRATION_SOURCE: &str = "\
+//! Purpose: hold exactly one prose comment inside a named function.
+//! Responsibilities: keep the header channel intact so only narration is flagged.
+//! Rationale: the envelope test needs a stable symbol-scoped finding.
+
+fn helper() {
+    // accumulate every item into the running total
+    let total = items.iter().sum();
+}
+";
+
 #[test]
 fn findings_fail_the_run_with_a_stable_id_and_remediation() {
     // spec: Check envelope / a prose finding fails the run with a repo-relative anchor and remediation.
     let repo = TempRepo::new("findings");
-    repo.copy_fixture("narration.rs", "src/lib.rs");
+    repo.write("src/lib.rs", NARRATION_SOURCE);
     repo.write("sad.toml", "require_header = true\n");
 
     let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
@@ -116,7 +127,7 @@ fn repeated_runs_are_deterministic() {
 fn text_mode_reports_the_verdict_and_the_first_fix() {
     // spec: Text mode / the human line names the verdict, the counts, and the first fix.
     let findings_repo = TempRepo::new("text-findings");
-    findings_repo.copy_fixture("narration.rs", "src/lib.rs");
+    findings_repo.write("src/lib.rs", NARRATION_SOURCE);
     findings_repo.write("sad.toml", "require_header = true\n");
 
     let failing = run_sad(findings_repo.path(), &["check", "--all"]);
@@ -132,7 +143,7 @@ fn text_mode_reports_the_verdict_and_the_first_fix() {
         "text mode stays one line: {failing_stdout}"
     );
     assert!(
-        failing_stdout.contains("1 finding in 1 file"),
+        failing_stdout.contains("fail: 1 blocking, 0 warnings in 1 file"),
         "text mode must pluralise correctly: {failing_stdout}"
     );
     assert!(
@@ -145,15 +156,15 @@ fn text_mode_reports_the_verdict_and_the_first_fix() {
     );
 
     let plural_repo = TempRepo::new("text-plural");
-    plural_repo.copy_fixture("narration.rs", "src/a.rs");
-    plural_repo.copy_fixture("narration.rs", "src/b.rs");
+    plural_repo.write("src/a.rs", NARRATION_SOURCE);
+    plural_repo.write("src/b.rs", NARRATION_SOURCE);
     plural_repo.write("sad.toml", "require_header = true\n");
 
     let plural = run_sad(plural_repo.path(), &["check", "--all"]);
     assert_eq!(plural.status.code(), Some(1));
     let plural_stdout = String::from_utf8(plural.stdout).expect("text stdout is UTF-8");
     assert!(
-        plural_stdout.contains("2 findings in 2 files"),
+        plural_stdout.contains("fail: 2 blocking, 0 warnings in 2 files"),
         "text mode must pluralise counts: {plural_stdout}"
     );
     assert!(

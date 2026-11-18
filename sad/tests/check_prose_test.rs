@@ -162,8 +162,8 @@ fn finding_id_is_stable_under_line_drift_and_sensitive_to_body_and_symbol() {
     assert_eq!(base.symbol_path, "total");
 
     let shifted_source = NARRATION.replace(
-        "    // accumulate every item into the running total\n    items.iter().sum()",
-        "    let sum = items.iter().sum();\n    // accumulate every item into the running total\n    sum",
+        "    // sum every item through the iterator\n    items.iter().sum()",
+        "    let sum = items.iter().sum();\n    // sum every item through the iterator\n    sum",
     );
     assert_ne!(shifted_source, NARRATION, "the drift variant must differ");
     let shifted = only_outside_channel(&shifted_source, &cfg);
@@ -174,7 +174,7 @@ fn finding_id_is_stable_under_line_drift_and_sensitive_to_body_and_symbol() {
         "line drift inside one symbol must not change the id"
     );
 
-    let edited_source = NARRATION.replace("accumulate every item", "accumulate each item");
+    let edited_source = NARRATION.replace("sum every item", "sum each item");
     assert_ne!(edited_source, NARRATION, "the edit variant must differ");
     let edited = only_outside_channel(&edited_source, &cfg);
     assert_eq!(edited.line, base.line, "only the body changed");
@@ -184,8 +184,8 @@ fn finding_id_is_stable_under_line_drift_and_sensitive_to_body_and_symbol() {
     );
 
     let other_symbol_source = NARRATION.replace(
-        "pub fn total(items: &[i32]) -> i32 {\n    // accumulate every item into the running total\n    items.iter().sum()\n}",
-        "pub fn count(items: &[i32]) -> usize {\n    // accumulate every item into the running total\n    items.len()\n}",
+        "pub fn total(items: &[i32]) -> i32 {\n    // sum every item through the iterator\n    items.iter().sum()\n}",
+        "pub fn count(items: &[i32]) -> usize {\n    // sum every item through the iterator\n    items.len()\n}",
     );
     assert_ne!(
         other_symbol_source, NARRATION,

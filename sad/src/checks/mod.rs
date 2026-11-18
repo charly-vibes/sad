@@ -13,6 +13,7 @@ pub mod doc_cap;
 pub mod header;
 pub mod marker;
 pub mod outside_channel;
+pub mod smell;
 pub mod suppression;
 
 /// Repository ledgers a marker id may resolve against.

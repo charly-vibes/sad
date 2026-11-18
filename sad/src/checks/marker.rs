@@ -18,7 +18,7 @@
 
 use crate::checks::RepoContext;
 use crate::config::Config;
-use crate::model::{AnalyzedFile, AttributionClass, Finding, FindingKind, finding_id};
+use crate::model::{AnalyzedFile, AttributionClass, Finding, FindingKind, Severity, finding_id};
 use crate::remediation;
 
 /// Punctuation that separates a cited id from the rest of its sentence.
@@ -61,6 +61,8 @@ pub fn run(file: &AnalyzedFile, cfg: &Config, ctx: &RepoContext) -> Vec<Finding>
             symbol_path: node.symbol_path.clone(),
             message: format!("traceability marker cites `{id}`, which resolves to no {ledgers}"),
             text: node.body.clone(),
+            severity: Severity::Error,
+            smell: None,
             remediation: remediation::for_kind(FindingKind::UnresolvableMarker, &file.path),
         });
     }

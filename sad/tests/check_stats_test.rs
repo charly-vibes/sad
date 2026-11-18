@@ -91,7 +91,11 @@ fn stats_shape_reports_every_class() {
     repo.copy_fixture("all_classes.py", "classes.py");
 
     let (code, envelope) = run_json(repo.path(), &["check", "--json"]);
-    assert_eq!(code, 1, "the one prose node is a finding: {envelope}");
+    assert_eq!(
+        code, 0,
+        "the unclassified prose node is a non-blocking warning: {envelope}"
+    );
+    assert_eq!(envelope["ok"], true);
 
     let stats = &envelope["data"]["stats"];
     for key in [
@@ -109,6 +113,7 @@ fn stats_shape_reports_every_class() {
         "comments_header",
         "comments_doc",
         "comments_marker",
+        "comments_rationale",
         "comments_suppression",
         "comments_prose",
         "suppression_debt",
@@ -138,10 +143,20 @@ fn stats_shape_reports_every_class() {
     assert_eq!(stats["comments_header"], 1usize);
     assert_eq!(stats["comments_doc"], 1usize);
     assert_eq!(stats["comments_marker"], 1usize);
+    assert_eq!(
+        stats["comments_rationale"], 0usize,
+        "the fixture carries no rationale node: {stats}"
+    );
     assert_eq!(stats["comments_suppression"], 1usize);
     assert_eq!(stats["comments_prose"], 1usize);
     assert_eq!(stats["suppression_debt"], 1usize);
+    assert_eq!(reported_findings(&envelope).len(), 1);
+    assert_eq!(stats["findings"], 1usize);
     assert_eq!(stats["findings"], reported_findings(&envelope).len() as u64);
+    assert_eq!(
+        stats["findings_blocking"], 0usize,
+        "the lone prose finding is a warning, not a blocking error: {stats}"
+    );
     assert_eq!(
         stats["findings_suppressed"], 0usize,
         "a run without a baseline suppresses nothing: {stats}"
@@ -228,7 +243,15 @@ fn scope_counts_explain_a_zero_selection_run() {
     );
 
     let (all_code, all) = run_json(repo.path(), &["check", "--all", "--json"]);
-    assert_eq!(all_code, 1, "the uncommitted narration is a finding: {all}");
+    assert_eq!(
+        all_code, 0,
+        "the uncommitted narration is a non-blocking warning: {all}"
+    );
+    assert_eq!(reported_findings(&all).len(), 1, "{all}");
+    assert_eq!(
+        all["data"]["stats"]["findings_blocking"], 0usize,
+        "a warning-class finding never blocks the run: {all}"
+    );
     assert_eq!(
         all["data"]["stats"]["files_selected"], 1usize,
         "--all widens scope: {all}"
@@ -240,11 +263,11 @@ fn javascript_sources_are_gated_through_the_typescript_frontend() {
     let repo = TempRepo::new("javascript");
     repo.write(
         "src/app.js",
-        "export function bump(counter) {\n    // increment the counter\n    return counter + 1;\n}\n",
+        "export function bump(counter) {\n    // increment the counter\n    return counter.increment();\n}\n",
     );
     repo.write(
         "src/mod.mjs",
-        "export function reset(state) {\n    // clear every field before reuse\n    state.value = 0;\n}\n",
+        "export function reset(state) {\n    // reset the state\n    state.reset();\n}\n",
     );
 
     let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);

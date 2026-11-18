@@ -54,6 +54,9 @@ pub enum Command {
         /// `--all` so adoption always sees the whole tree.
         #[arg(long)]
         adopt: bool,
+        /// Fail on any finding, not only error-severity findings.
+        #[arg(long)]
+        strict: bool,
         /// Explicit `sad.toml` path; defaults to `./sad.toml` when present.
         #[arg(long, value_name = "PATH")]
         config: Option<PathBuf>,
@@ -209,7 +212,12 @@ fn ledger_remediation() -> Vec<RemediationEntry> {
 pub fn run(command: Command) -> String {
     let envelope = match command {
         Command::Version => serde_json::to_value(version_envelope()),
-        Command::Check { all, adopt, config } => {
+        Command::Check {
+            all,
+            adopt,
+            strict,
+            config,
+        } => {
             match resolve_config(config.as_deref()) {
                 Ok(resolved) => {
                     // The gate always analyses the working directory, which is
@@ -217,7 +225,9 @@ pub fn run(command: Command) -> String {
                     // degrades to a relative "." rather than panicking.
                     let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     match check::run(&repo, &resolved, all, adopt) {
-                        Ok(report) => serde_json::to_value(envelope::check_envelope(report)),
+                        Ok(report) => {
+                            serde_json::to_value(envelope::check_envelope(report, strict))
+                        }
                         Err(failure) => Ok(gate_failure_envelope(&failure, config.as_deref())),
                     }
                 }

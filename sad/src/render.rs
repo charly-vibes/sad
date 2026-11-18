@@ -1,7 +1,9 @@
 //! Purpose: render an emitted envelope JSON string as the one-line text mode.
 //! Responsibilities: pick the check or suite rendering, summarise the verdict
 //! and counts, name the first finding with its remediation, explain an empty
-//! attribution scope, and name every skipped source with its reason.
+//! attribution scope, and name every skipped source with its reason. The check
+//! line is assembled from a verdict prefix, an optional first-finding clause,
+//! and the attribution and skip suffixes, each built by its own helper.
 //! Rationale: text mode is a convenience view of the same envelope, never a
 //! second output format with different content, so every branch here reads the
 //! JSON the machine consumer reads. Keeping the renderers out of `cli.rs`
@@ -31,29 +33,21 @@ pub fn render_text(json: &str) -> String {
     }
 }
 
-/// One-line check summary: verdict, counts, first finding, and skip signals.
+/// One-line check summary: verdict, severity counts, first finding, and skip
+/// signals.
 ///
-/// Includes the first finding as `path:line check_id` with its remediation
-/// command when the envelope carries one, the attribution hint when nothing
-/// was selected, and every skipped source with its reason.
+/// Names the blocking findings apart from warnings once anything is reported,
+/// includes the first finding as `path:line check_id` with its remediation
+/// command when the run fails, the attribution hint when nothing was selected,
+/// and every skipped source with its reason.
 fn check_text(v: &Value) -> String {
     let stats = &v["data"]["stats"];
-    let findings = stats["findings"].as_u64().unwrap_or(0);
-    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
-    let verdict = if v["ok"].as_bool().unwrap_or(false) {
-        "pass"
-    } else {
-        "fail"
-    };
-    let mut line = format!(
-        "sad check — {verdict}: {findings} {} in {files} {}",
-        plural(findings, "finding"),
-        plural(files, "file"),
-    );
-    if let Some(brief) = first_finding_brief(&v["data"]["findings"]) {
-        line.push_str("; ");
-        line.push_str(&brief);
+    let ok = v["ok"].as_bool().unwrap_or(false);
+    let mut line = verdict_prefix(stats, ok);
+    if let Some(clause) = first_finding_clause(&v["data"]["findings"], ok) {
+        line.push_str(&clause);
     }
+    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
     let selected = stats["files_selected"].as_u64().unwrap_or(files);
     let unattributed = stats["files_unattributed"].as_u64().unwrap_or(0);
     if selected == 0 && unattributed > 0 {
@@ -69,6 +63,44 @@ fn check_text(v: &Value) -> String {
     }
     line.push('\n');
     line
+}
+
+/// The verdict and count prefix: pass or fail, the severity counts, and the
+/// analysed-file total.
+///
+/// A run with no findings always reads as a plain pass, so warnings alone keep
+/// the passing verdict and only failures name the blocking count.
+fn verdict_prefix(stats: &Value, ok: bool) -> String {
+    let findings = stats["findings"].as_u64().unwrap_or(0);
+    let blocking = stats["findings_blocking"].as_u64().unwrap_or(0);
+    let warnings = findings.saturating_sub(blocking);
+    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
+    if findings == 0 {
+        format!(
+            "sad check — pass: 0 findings in {files} {}",
+            plural(files, "file"),
+        )
+    } else if ok {
+        format!(
+            "sad check — pass: 0 blocking, {warnings} {} in {files} {}",
+            plural(warnings, "warning"),
+            plural(files, "file"),
+        )
+    } else {
+        format!(
+            "sad check — fail: {blocking} blocking, {warnings} {} in {files} {}",
+            plural(warnings, "warning"),
+            plural(files, "file"),
+        )
+    }
+}
+
+/// The first-finding clause, separator included; only a failing run names one.
+fn first_finding_clause(findings: &Value, ok: bool) -> Option<String> {
+    if ok {
+        return None;
+    }
+    first_finding_brief(findings).map(|brief| format!("; {brief}"))
 }
 
 /// The skipped-source suffix, read from the `unreadable_source` warnings.

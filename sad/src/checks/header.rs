@@ -22,7 +22,9 @@
 //! the predicate). The check is pure: no filesystem, git, or clock access.
 
 use crate::config::Config;
-use crate::model::{AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, finding_id};
+use crate::model::{
+    AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, Severity, finding_id,
+};
 use crate::remediation;
 
 /// Header keywords every first block must name, in canonical order.
@@ -65,6 +67,8 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
             missing.join(", ")
         ),
         text: body,
+        severity: Severity::Error,
+        smell: None,
         remediation: remediation::for_kind(FindingKind::MissingHeader, &file.path),
     }]
 }

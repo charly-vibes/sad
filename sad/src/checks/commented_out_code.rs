@@ -17,7 +17,8 @@ use tree_sitter::Parser;
 use crate::config::Config;
 use crate::extract::parser_for;
 use crate::model::{
-    AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, Language, finding_id,
+    AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, Language, Severity, Smell,
+    finding_id,
 };
 use crate::remediation;
 
@@ -163,7 +164,9 @@ fn finding(file: &AnalyzedFile, anchor: &CommentNode, body: String) -> Finding {
         symbol_path: anchor.symbol_path.clone(),
         message: MESSAGE.to_string(),
         text: body,
-        remediation: remediation::for_kind(FindingKind::CommentedOutCode, &file.path),
+        severity: Severity::Warning,
+        smell: Some(Smell::CommentedOutCode),
+        remediation: remediation::for_smell(Smell::CommentedOutCode, &file.path),
     }
 }
 

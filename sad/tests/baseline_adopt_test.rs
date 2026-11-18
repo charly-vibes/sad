@@ -10,10 +10,28 @@ mod support;
 
 use support::baseline::*;
 
+const NARRATION_SOURCE: &str = "\
+//! Purpose: hold exactly one prose comment inside a named function.
+//! Responsibilities: keep the header channel intact so only narration is flagged.
+//! Rationale: an adopted error id must be recorded from this file.
+
+fn helper() {
+    // accumulate every item into the running total
+    let total = items.iter().sum();
+}
+";
+
+fn repo_with_one_error(tag: &str) -> TempRepo {
+    let repo = TempRepo::new(tag);
+    repo.write("src/lib.rs", NARRATION_SOURCE);
+    repo.copy_fixture("clean.rs", "src/clean.rs");
+    repo
+}
+
 #[test]
 fn adopt_writes_the_baseline_contract_and_exits_zero_with_findings() {
     // spec: Baseline adoption / `--adopt` writes sad-baseline.json and exits 0 despite findings.
-    let repo = TempRepo::with_findings();
+    let repo = repo_with_one_error("findings");
 
     let (before_code, before) = run_json(repo.path(), &["check", "--all", "--json"]);
     assert_eq!(before_code, 1, "the pre-adopt run must fail: {before}");
@@ -63,7 +81,7 @@ fn adopt_writes_the_baseline_contract_and_exits_zero_with_findings() {
 #[test]
 fn adopted_findings_are_suppressed_by_the_next_plain_run() {
     // spec: Baseline suppression / grandfathered ids stop failing the gate.
-    let repo = TempRepo::with_findings();
+    let repo = repo_with_one_error("findings");
     let (code, envelope) = run_adopt(repo.path());
     assert_eq!(code, 0, "adoption exits 0: {envelope}");
     assert!(
@@ -89,7 +107,7 @@ fn adopted_findings_are_suppressed_by_the_next_plain_run() {
 #[test]
 fn fixing_prose_passes_without_rewriting_and_re_adoption_shrinks() {
     // spec: Baseline shrink-only / fixing prose passes and re-adoption only shrinks.
-    let repo = TempRepo::with_findings();
+    let repo = repo_with_one_error("findings");
     let (code, envelope) = run_adopt(repo.path());
     assert_eq!(code, 0, "adoption exits 0: {envelope}");
     let original_ids = baseline_ids(&repo.read_baseline());
@@ -125,7 +143,7 @@ fn fixing_prose_passes_without_rewriting_and_re_adoption_shrinks() {
 #[test]
 fn adoption_is_deterministic_for_an_unchanged_tree() {
     // spec: Baseline determinism / repeated adoption yields the same finding_ids.
-    let repo = TempRepo::with_findings();
+    let repo = repo_with_one_error("findings");
 
     let (code, first) = run_adopt(repo.path());
     assert_eq!(code, 0, "first adoption exits 0: {first}");
@@ -148,12 +166,12 @@ fn adoption_is_deterministic_for_an_unchanged_tree() {
 }
 
 const DUPLICATE_PROSE: &str = "\
-pub fn total() -> i32 {
-    // keep the running total in sync with the ledger
-    let mut sum = 0;
-    // keep the running total in sync with the ledger
-    sum += 1;
-    sum
+pub fn total(items: &[i32]) -> i32 {
+    // accumulate every item into the running total
+    let running_total = items.iter().sum::<i32>();
+    // accumulate every item into the running total
+    let total = running_total + items.len() as i32;
+    total
 }
 ";
 

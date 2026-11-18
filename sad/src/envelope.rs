@@ -7,10 +7,12 @@
 //! and build the genesis `Check` envelope, setting `ok` so the envelope
 //! verdict and the process exit status agree.
 //! Rationale: genesis 0.13.2 hardcodes `ok = true` for every non-error kind,
-//! but a check envelope with findings must be a failure — so the verdict is
-//! derived here from `findings.is_empty()` and written explicitly, keeping the
-//! envelope the only place that decides pass/fail. Gate failures live beside
-//! the payload they replace so the success and error contracts stay together.
+//! but a check envelope with new findings must fail — so the verdict is
+//! derived here from the severity counts (`strict` refuses every finding, the
+//! default refuses only error-severity ones) and written explicitly, keeping
+//! the envelope the only place that decides pass/fail. Gate failures live
+//! beside the payload they replace so the success and error contracts stay
+//! together.
 
 use std::fmt;
 use std::path::Path;
@@ -20,7 +22,7 @@ use serde::Serialize;
 
 use crate::baseline::BaselineError;
 use crate::exemptions;
-use crate::model::{AnalyzedFile, AttributionClass, Finding, SuppressionEntry};
+use crate::model::{AnalyzedFile, AttributionClass, Finding, Severity, SuppressionEntry};
 
 /// Machine-readable body of the `sad check` envelope.
 ///
@@ -97,11 +99,16 @@ pub struct CheckStats {
     pub comments_header: usize,
     pub comments_doc: usize,
     pub comments_marker: usize,
+    pub comments_rationale: usize,
     pub comments_suppression: usize,
     pub comments_prose: usize,
     pub suppression_debt: usize,
     /// Findings that reached the report, i.e. new debt for this run.
     pub findings: usize,
+    /// How many of those findings carry [`Severity::Error`]; filled by
+    /// [`check_envelope`] from the released findings, so the default and
+    /// `--strict` verdicts share one count.
+    pub findings_blocking: usize,
     /// Findings grandfathered by `sad-baseline.json` and not reported.
     pub findings_suppressed: usize,
 }
@@ -131,10 +138,12 @@ impl CheckStats {
             comments_header: count_class(analyzed, AttributionClass::Header),
             comments_doc: count_class(analyzed, AttributionClass::Doc),
             comments_marker: count_class(analyzed, AttributionClass::Marker),
+            comments_rationale: count_class(analyzed, AttributionClass::Rationale),
             comments_suppression: count_class(analyzed, AttributionClass::Suppression),
             comments_prose: count_class(analyzed, AttributionClass::Prose),
             suppression_debt: debt.len(),
             findings: findings.len(),
+            findings_blocking: 0,
             findings_suppressed: 0,
         }
     }
@@ -207,10 +216,20 @@ pub fn growth_message(path: &Path, ids: &[String]) -> String {
 
 /// Build the Check envelope for a completed run.
 ///
-/// No findings is a pass; any finding is a fail, even though the payload is a
-/// successful command result rather than an error envelope.
-pub fn check_envelope(mut report: CheckReport) -> Envelope<CheckReport> {
-    let ok = report.findings.is_empty();
+/// A clean run and a warning-only run pass by default; any error-severity
+/// finding fails, and `strict` fails on any finding at all. The payload stays
+/// a successful command result rather than an error envelope.
+pub fn check_envelope(mut report: CheckReport, strict: bool) -> Envelope<CheckReport> {
+    report.stats.findings_blocking = report
+        .findings
+        .iter()
+        .filter(|finding| finding.severity == Severity::Error)
+        .count();
+    let ok = if strict {
+        report.findings.is_empty()
+    } else {
+        report.stats.findings_blocking == 0
+    };
     let warnings = std::mem::take(&mut report.warnings);
     let mut envelope = Envelope::success(
         env!("CARGO_PKG_VERSION"),

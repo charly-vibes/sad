@@ -2,9 +2,10 @@
 //! header, doc, marker, suppression, exemption, or finding-eligible prose —
 //! and parse suppression directives.
 //! Responsibilities: apply the channel precedence (doc kinds never move to
-//! marker/suppression; header-position nodes stay header), recognise every
-//! v1 suppression form, and match marker-prefixed IDs with a regex compiled
-//! once per file while resolving each cite to its full id token.
+//! marker/rationale/suppression; header-position nodes stay header), recognise
+//! every v1 suppression form and the closed rationale tag set, and match
+//! marker-prefixed IDs with a regex compiled once per file while resolving
+//! each cite to its full id token.
 //! Rationale: attribution is structural and side-effect free, so it lives
 //! apart from tree walking; keeping one precedence function means every
 //! frontend classifies identically, and giving each suppression form its own
@@ -71,10 +72,11 @@ fn is_id_continue(next: char) -> bool {
 
 /// Classify one raw comment body.
 ///
-/// Precedence: header-position → doc kind → exemption → suppression →
-/// marker → prose. Header wins over the doc kind because module docs are the
-/// header channel; doc kinds win over everything else so markers and
-/// suppression text inside documentation cannot route it elsewhere.
+/// Precedence: header-position → doc kind → marker → rationale →
+/// suppression → exemption → prose. Header wins over the doc kind because
+/// module docs are the header channel; doc kinds win over everything else so
+/// markers and suppression text inside documentation cannot route it
+/// elsewhere.
 pub fn classify(
     body: &str,
     kind: CommentKind,
@@ -88,16 +90,29 @@ pub fn classify(
     if kind == CommentKind::Doc {
         return (AttributionClass::Doc, None);
     }
-    if is_exemption(body) {
-        return (AttributionClass::Exemption, None);
+    if markers.is_marker(body, marker_prefix) {
+        return (AttributionClass::Marker, None);
+    }
+    if is_rationale(body) {
+        return (AttributionClass::Rationale, None);
     }
     if let Some(directive) = parse_directive(body) {
         return (AttributionClass::Suppression, Some(directive));
     }
-    if markers.is_marker(body, marker_prefix) {
-        return (AttributionClass::Marker, None);
+    if is_exemption(body) {
+        return (AttributionClass::Exemption, None);
     }
     (AttributionClass::Prose, None)
+}
+
+fn is_rationale(body: &str) -> bool {
+    let text = body.trim();
+    ["SAFETY:", "INVARIANT:", "SECURITY:", "WHY:"]
+        .into_iter()
+        .any(|tag| {
+            text.strip_prefix(tag)
+                .is_some_and(|rest| !rest.trim().is_empty())
+        })
 }
 
 /// Licence and generated-code markers exempt their file from findings.

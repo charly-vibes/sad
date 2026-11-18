@@ -12,8 +12,8 @@
 
 use crate::config::Config;
 use crate::model::{
-    AnalyzedFile, AttributionClass, Finding, FindingKind, SuppressionEntry, SuppressionForm,
-    finding_id,
+    AnalyzedFile, AttributionClass, Finding, FindingKind, Severity, SuppressionEntry,
+    SuppressionForm, finding_id,
 };
 use crate::remediation;
 
@@ -93,6 +93,8 @@ fn cap_finding(file: &AnalyzedFile, debt: &[SuppressionEntry], cap: usize) -> Fi
             .map(|entry| format!("{}@{}", form_id(entry.form), entry.line))
             .collect::<Vec<_>>()
             .join(","),
+        severity: Severity::Error,
+        smell: None,
         remediation: remediation::for_kind(FindingKind::SuppressionCapExceeded, &file.path),
     }
 }
@@ -142,6 +144,7 @@ mod tests {
                 check: check.map(str::to_string),
                 reason: None,
             }),
+            next_code_line: None,
         }
     }
 

@@ -5,6 +5,6 @@
 
 /// Returns the sum of the items.
 pub fn total(items: &[i32]) -> i32 {
-    // accumulate every item into the running total
+    // sum every item through the iterator
     items.iter().sum()
 }

@@ -58,3 +58,31 @@ fn missing_subcommand_is_an_envelope_error_not_help_text() {
             .stdout(str::contains("sad --help"));
     }
 }
+
+#[test]
+fn check_accepts_the_strict_flag_in_an_empty_directory() {
+    let dir = std::env::temp_dir().join(format!("sad-cli-strict-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the strict fixture directory is created");
+
+    let output = sad()
+        .current_dir(&dir)
+        .args(["check", "--strict", "--json"])
+        .output()
+        .expect("sad runs");
+    let stdout = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    assert!(
+        output.status.success(),
+        "strict on a clean tree must pass: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"envelope_kind\":\"check\""),
+        "strict still emits the check envelope: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"findings_blocking\":0"),
+        "strict counts blocking findings: {stdout}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

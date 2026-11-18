@@ -18,7 +18,7 @@ use std::path::Path;
 
 use serde::Deserialize;
 
-/// Lines of documentation summary allowed before the summary cap fires.
+/// Sentences of documentation summary allowed before the summary cap fires.
 const DEFAULT_DOC_SUMMARY_CAP: usize = 1;
 /// Prefix used in marker diagnostics (`see <id>`).
 const DEFAULT_MARKER_PREFIX: &str = "see";
@@ -34,7 +34,8 @@ const DEFAULT_ATTRIBUTION_TRAILER: &str = "Assisted-by";
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
-    /// Maximum doc-summary lines before the `doc_summary_cap_exceeded` check.
+    /// Maximum doc-summary sentences before the `doc_summary_cap_exceeded`
+    /// check.
     pub doc_summary_cap: usize,
     /// Prefix for marker diagnostics.
     pub marker_prefix: String,

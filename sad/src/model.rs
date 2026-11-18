@@ -1,9 +1,12 @@
 //! Purpose: the shared data contract of the documentation gate — languages,
 //! comment nodes, attribution channels, stable finding IDs, and the findings
 //! and suppression-debt records every later module produces.
-//! Responsibilities: keep the serialised shape of those records stable,
-//! normalise comment bodies before identity hashing, and pin the check-id
-//! spelling that findings serialise into the CLI envelope.
+//! Responsibilities: keep the serialised shape of those records stable —
+//! every finding names its severity and, when it is derived from comment
+//! prose, its smell; every comment node carries the next code line its
+//! classifier compares against — normalise comment bodies before identity
+//! hashing, and pin the check-id spelling that findings serialise into the
+//! CLI envelope.
 //! Rationale: extraction, attribution, checks, and the envelope all speak in
 //! these types; pinning names and the FNV-1a content hash here makes finding
 //! IDs reproducible across runs and machines.
@@ -37,9 +40,29 @@ pub enum AttributionClass {
     Header,
     Doc,
     Marker,
+    Rationale,
     Suppression,
     Exemption,
     Prose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Smell {
+    Narration,
+    Apology,
+    Todo,
+    Banner,
+    CommentedOutCode,
+    DocCap,
+    Unclassified,
 }
 
 /// Every suppression directive form recognised in v1.
@@ -75,6 +98,7 @@ pub struct CommentNode {
     /// Raw source text of the node.
     pub text: String,
     pub directive: Option<SuppressionDirective>,
+    pub next_code_line: Option<String>,
 }
 
 /// Everything the gate learned about one analysed file.
@@ -152,6 +176,8 @@ pub struct Finding {
     pub symbol_path: String,
     pub message: String,
     pub text: String,
+    pub severity: Severity,
+    pub smell: Option<Smell>,
     /// Hardcoded fix guidance for this finding kind, filled by the check that
     /// emitted the finding so the envelope is self-contained.
     pub remediation: RemediationEntry,
@@ -192,6 +218,8 @@ mod tests {
             symbol_path: "-".to_string(),
             message: "missing header".to_string(),
             text: "//! no header".to_string(),
+            severity: Severity::Error,
+            smell: None,
             remediation: crate::remediation::for_kind(FindingKind::MissingHeader, "src/lib.rs"),
         };
         let value = serde_json::to_value(&finding).expect("Finding must serialise");

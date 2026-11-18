@@ -13,7 +13,7 @@
 //! findings stable under line drift while staying sensitive to edits.
 
 use crate::config::Config;
-use crate::model::{AnalyzedFile, AttributionClass, Finding, FindingKind, finding_id};
+use crate::model::{AnalyzedFile, AttributionClass, Finding, FindingKind, Severity, finding_id};
 use crate::remediation;
 
 /// Message shared by every outside-channel finding: name the rule and the
@@ -57,6 +57,8 @@ pub fn run_excluding(file: &AnalyzedFile, cfg: &Config, excluded: &[usize]) -> V
             symbol_path: node.symbol_path.clone(),
             message: MESSAGE.to_string(),
             text: node.body.clone(),
+            severity: Severity::Warning,
+            smell: None,
             remediation: remediation::for_kind(FindingKind::CommentOutsideChannel, &file.path),
         })
         .collect()

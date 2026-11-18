@@ -295,6 +295,7 @@ fn long_prose_runs_stay_bounded_and_keep_per_node_findings() {
             body: format!("line {index}"),
             text: format!("// line {index}"),
             directive: None,
+            next_code_line: None,
         })
         .collect();
     let file = AnalyzedFile {

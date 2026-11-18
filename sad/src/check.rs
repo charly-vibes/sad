@@ -32,7 +32,7 @@ use crate::baseline::{self, Baseline};
 use genesis::envelope::Warning;
 
 use crate::checks::{
-    RepoContext, commented_out_code, doc_cap, header, marker, outside_channel, suppression,
+    RepoContext, commented_out_code, doc_cap, header, marker, outside_channel, smell, suppression,
 };
 use crate::config::Config;
 use crate::envelope::{CheckReport, CheckStats, FileCounts, GateFailure, growth_message};
@@ -255,6 +255,7 @@ fn collect_findings(
             .then(left.check.id().cmp(right.check.id()))
     });
     disambiguate_duplicate_ids(&mut findings);
+    smell::classify(analyzed, &mut findings, cfg, context);
     findings
 }
 

@@ -1,9 +1,9 @@
-//! Purpose: hold the per-kind remediation guidance every finding carries in
-//! the check envelope.
-//! Responsibilities: map each [`FindingKind`] to exactly one stable
-//! [`RemediationEntry`] (an actionable command plus a human description),
-//! rendering the finding's repo-relative anchor path into the command so what
-//! the envelope carries is runnable as emitted.
+//! Purpose: hold the per-kind and per-smell remediation guidance every
+//! finding carries in the check envelope.
+//! Responsibilities: map each [`FindingKind`] and each [`Smell`] to exactly one
+//! stable [`RemediationEntry`] (an actionable command plus a human
+//! description), rendering the finding's repo-relative anchor path into the
+//! command so what the envelope carries is runnable as emitted.
 //! Rationale: remediation is part of the machine contract — the spec requires
 //! every finding to name a fix without prescribing a specific refactor — so
 //! the descriptions live in one table here rather than being composed at each
@@ -11,7 +11,7 @@
 
 use genesis::envelope::RemediationEntry;
 
-use crate::model::FindingKind;
+use crate::model::{FindingKind, Smell};
 
 /// The hardcoded remediation entry for `kind`, anchored to `path`.
 ///
@@ -27,6 +27,17 @@ pub fn for_kind(kind: FindingKind, path: &str) -> RemediationEntry {
     RemediationEntry {
         command,
         description: description(kind).to_string(),
+    }
+}
+
+pub fn for_smell(smell: Smell, path: &str) -> RemediationEntry {
+    let command = match smell {
+        Smell::CommentedOutCode => format!("git log -p --follow {path}"),
+        _ => format!("$EDITOR {path}"),
+    };
+    RemediationEntry {
+        command,
+        description: smell_description(smell).to_string(),
     }
 }
 
@@ -57,6 +68,36 @@ fn description(kind: FindingKind) -> &'static str {
         FindingKind::SuppressionCapExceeded => {
             "Reduce suppression debt by fixing the underlying finding or removing the \
              directive that hides it."
+        }
+    }
+}
+
+fn smell_description(smell: Smell) -> &'static str {
+    match smell {
+        Smell::Narration => {
+            "Rename or extract so the code says it; deleting is acceptable only when the \
+             comment is redundant."
+        }
+        Smell::Apology => {
+            "Fix the condition, or cite a resolvable id so the note joins the marker \
+             channel; a bare apology is not a channel."
+        }
+        Smell::Todo => {
+            "Fix it now, or cite a resolvable id so the note joins the marker channel; an \
+             uncited TODO is debt."
+        }
+        Smell::Banner => "Delete the separator banner; it carries no information.",
+        Smell::CommentedOutCode => {
+            "Delete the commented-out code. If it is still needed, recover it from VCS \
+             history; never restore it as a comment."
+        }
+        Smell::DocCap => {
+            "Shorten the summary lead to one sentence and keep structured sections after a \
+             blank line."
+        }
+        Smell::Unclassified => {
+            "Move it into a documented channel (header, doc, marker, or rationale), or delete \
+             it if it restates the code."
         }
     }
 }

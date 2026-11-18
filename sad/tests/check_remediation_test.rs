@@ -83,19 +83,15 @@ fn remediation_descriptions_name_the_fix() {
     let outside = remediation_description(finding_of_kind(&first, "comment_outside_channel"))
         .to_ascii_lowercase();
     assert!(
-        outside.contains("channel"),
-        "outside-channel fix must mention the channel: {outside}"
-    );
-    assert!(
-        outside.contains("move") || outside.contains("delete"),
-        "outside-channel fix must say move-or-delete: {outside}"
+        outside.contains("rename or extract"),
+        "a narration finding must say rename-or-extract: {outside}"
     );
 
     let doc = remediation_description(finding_of_kind(&first, "doc_summary_cap_exceeded"))
         .to_ascii_lowercase();
     assert!(
-        doc.contains("summary") && doc.contains("cap"),
-        "doc-cap fix must mention the summary lead and the cap: {doc}"
+        doc.contains("summary") && doc.contains("sentence"),
+        "doc-cap fix must mention the summary lead and the one-sentence cap: {doc}"
     );
 
     let marker = remediation_description(finding_of_kind(&first, "unresolvable_marker"))

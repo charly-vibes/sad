@@ -3,5 +3,6 @@
 //! Rationale: the envelope test needs a stable symbol-scoped finding.
 
 fn helper() {
-    // narration that belongs to no documented channel
+    // sum every item through the iterator
+    let total = items.iter().sum();
 }

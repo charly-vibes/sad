@@ -88,6 +88,23 @@ fn empty_file(rel_path: &str, language: Language) -> AnalyzedFile {
     }
 }
 
+fn next_code_line(node: Node<'_>, source: &str) -> Option<String> {
+    let mut sibling = node.next_named_sibling();
+    while let Some(current) = sibling {
+        let comment_like = matches!(
+            current.kind(),
+            "line_comment" | "block_comment" | "comment" | "doc_comment"
+        );
+        if !comment_like {
+            let rest = source.get(current.start_byte()..)?;
+            let line = rest.lines().find(|line| !line.trim().is_empty())?;
+            return Some(line.trim().to_string());
+        }
+        sibling = current.next_named_sibling();
+    }
+    None
+}
+
 struct Extractor<'a> {
     language: Language,
     source: &'a str,
@@ -167,6 +184,10 @@ impl<'a> Extractor<'a> {
         raw: &str,
         directive: Option<crate::model::SuppressionDirective>,
     ) {
+        let next_code_line = match kind {
+            CommentKind::Doc => None,
+            CommentKind::Line | CommentKind::Block => next_code_line(node, self.source),
+        };
         let start_byte = node.start_byte();
         self.nodes.push((
             start_byte,
@@ -178,6 +199,7 @@ impl<'a> Extractor<'a> {
                 body,
                 text: raw.trim_end_matches(['\r', '\n']).to_string(),
                 directive,
+                next_code_line,
             },
         ));
     }
