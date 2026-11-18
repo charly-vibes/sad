@@ -180,8 +180,9 @@ the marker channel when its ID resolves and emitting an
 `unresolvable_marker` finding when it does not. `marker_prefix` and the
 configured ID pattern control recognition. Doc-channel nodes SHALL never
 route to the marker channel. Suppression directives SHALL be recognized
-in any comment node kind. A resolver SHALL no-op while its source is
-absent.
+in any comment node kind, subject to the channel precedence above:
+header and doc nodes are never suppression. A resolver SHALL no-op while
+its source is absent.
 
 #### Scenario: Resolvable ticket ID
 

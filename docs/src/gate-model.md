@@ -113,7 +113,11 @@ Every suppression directive — `# noqa`, `# type: ignore`, `// @ts-ignore`,
 `// @ts-expect-error`, `// eslint-disable-*`, and sad's own
 `sad:ignore <check-id> <reason>` — is exempt-but-counted: never a prose
 finding, always a `suppression_debt` entry (file, line, directive, check)
-in the envelope. A directive scopes to a single check and withholds no
+in the envelope. A directive is recognized only while it *opens* the
+comment body, and only outside the header and doc channels: the
+attribution precedence wins over directive parsing, so a trailing
+`# noqa` after prose is ordinary prose. A directive scopes to a single
+check and withholds no
 other finding; the two `@ts-*` forms are unscoped and serialise as
 `ts_ignore` and `ts_expect_error`. When `suppression_cap` is set (see
 [Configuration](#configuration-sadtoml)), a file whose debt exceeds it
@@ -162,7 +166,7 @@ module-level statements, and class bodies. The rules are deterministic:
 | `todo` | body matches `TODO`, `FIXME`, or `XXX` as a whole word, and no resolvable marker is in the node |
 | `apology` | body matches `for now`, `temporary fix` / `temporary hack` / `temporary workaround` / `temporary shim` / `temporary patch`, `workaround`, `hack:`, `legacy shim`, or `to be removed`, and no resolvable marker is in the node; bare `temporary` or `hack` is not enough |
 | `narration` | the run shares at least two distinctive tokens with the next non-comment statement in the same scope, or starts with a sequencer and names the next call (see below) |
-| `banner` | body has no alphanumerics, or is a run of three or more repeated separator characters; applies to `commented_out_code` bodies too |
+| `banner` | body has no alphanumerics — a separator ruler is a run of repeated separator characters, so it has none; applies to `commented_out_code` bodies too |
 | `unclassified` | prose matching none of the above |
 
 **Narration.** Take the run and the first non-empty, non-comment source
@@ -171,8 +175,7 @@ identifiers and literals of length at least 4 and dropping a fixed
 English/stopword/keyword list (`this`, `that`, `with`, `from`, `then`,
 `when`, `where`, `which`, `will`, `have`, `into`, `over`, `under`,
 `about`, `after`, `before`, `these`, `those`, `their`, `there`,
-`function`, `value`, `return`, `create`, `make`, `call`, `line`, plus
-language keywords). Tokens match by prefix, so `parse` meets
+`function`, `value`, `return`, `create`, `make`, `call`, `line`). Tokens match by prefix, so `parse` meets
 `parse_config`. The run is narration when at least two distinct comment
 tokens appear in that next statement, or when the run starts with
 `now`, `then`, `first`, `next`, or `finally` and the statement contains a
@@ -325,7 +328,7 @@ agent's job; sad refuses prose as a substitute.
 | `resolvers` | `.beads/issues.jsonl`, `openspec/specs/` | resolution sources; each no-ops while absent |
 | `require_header` | on only in sad's own repo | enable `missing_header` |
 | `suppression_cap` | off (per analyzed file) | maximum suppression debt per file |
-| `exclude` | none | globs whose paths produce no findings |
+| `exclude` | none | globs whose paths produce no findings; a pattern without `**` names a root-rooted directory or file prefix (`vendor` excludes the tree below `vendor/`), so write `**/*.pyi` for an extension at any depth |
 | `attribution.trailer` | `Assisted-by` | commit trailer (or session tag) marking agent-attributed commits |
 
 ## Languages

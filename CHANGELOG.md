@@ -5,6 +5,15 @@ milestone, not by cadence.
 
 ## v0.2.0 — unreleased
 
+- **Marker id consistency** (sad-o41): `unresolvable_marker` now extracts
+  the cited id with the same attribution extractor that classified the
+  node, so `see sad-lcy-` or `see sad-lcy(sic)` is judged as `sad-lcy`
+  instead of the literal token — no false findings for trailing-hyphen or
+  glued-punctuation cites.
+- **Discovery**: a broken (unreadable or non-UTF-8) root `.gitignore`
+  contributes no rules while deeper ignore files stay in force, exactly
+  as the spec states; previously it disabled ignore filtering entirely.
+
 - **Severity on every finding** (change `comment-smell-triage`): findings
   carry `severity: error|warning`, and `smell` names the prose smell —
   `narration`, `apology`, `todo`, `banner`, `commented_out_code`,
