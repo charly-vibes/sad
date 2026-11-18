@@ -1,0 +1,9 @@
+id = "block-findings-are-errors"
+description = "The commented_out_code finding carries smell commented_out_code and severity error."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "block_findings_are_errors"}]

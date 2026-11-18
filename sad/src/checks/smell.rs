@@ -166,10 +166,10 @@ fn smell_of(
 
 fn severity_of(smell: Smell) -> Severity {
     match smell {
-        Smell::Narration | Smell::Apology | Smell::Todo => Severity::Error,
-        Smell::Banner | Smell::CommentedOutCode | Smell::DocCap | Smell::Unclassified => {
-            Severity::Warning
+        Smell::Narration | Smell::Apology | Smell::Todo | Smell::CommentedOutCode => {
+            Severity::Error
         }
+        Smell::Banner | Smell::DocCap | Smell::Unclassified => Severity::Warning,
     }
 }
 

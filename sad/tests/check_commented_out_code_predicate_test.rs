@@ -1,9 +1,8 @@
 //! Purpose: contract tests for the `commented_out_code` predicate's
-//! near-miss boundary — the prose that must never enter the class.
-//! Responsibilities: pin the parse-error, bare-expression, label,
-//! annotation-only, and bodyless-signature near-misses, the pinned
-//! documentation false positive, and the prose fallback a predicate miss
-//! leaves behind.
+//! precision boundary — the prose that must never enter the class.
+//! Responsibilities: pin the parse-error, formula, expected-value annotation,
+//! call-example, label, separator, annotation-only, and bodyless-signature
+//! corpus, and the prose fallback a predicate miss leaves behind.
 //! Rationale: the predicate is the only thing standing between prose and a
 //! delete-it finding, so each grammar's near-misses are locked down through
 //! the same `analyze_file` frontend and real fixtures the gate uses.
@@ -83,16 +82,108 @@ fn bodyless_signature_stays_prose() {
     assert_eq!(bodies(&prose), vec!["fn f();"]);
 }
 
-/// spec: Commented-out code / Documentation call example is a known false positive.
+/// spec: Commented-out code / Call-shaped examples stay prose.
 #[test]
-fn documentation_call_example_is_a_known_false_positive() {
+fn call_shaped_examples_stay_prose() {
     let cfg = Config::default();
     let file = fixture("false_positive.rs");
     let (dead, prose) = split(&file, &cfg);
 
-    assert_eq!(dead.len(), 1, "the pinned false positive still fires");
-    assert_eq!(dead[0].text, "e.g. g();");
-    assert_eq!(prose.len(), 0);
+    assert_eq!(dead.len(), 0, "`e.g. g();` is a call example, not code");
+    assert_eq!(bodies(&prose), vec!["e.g. g();"]);
+
+    for (name, source, body) in [
+        ("call.rs", "fn outer() {\n    // f();\n}\n", "f();"),
+        (
+            "call.ts",
+            "function outer() {\n  // new Foo();\n}\n",
+            "new Foo();",
+        ),
+        (
+            "label.ts",
+            "function outer() {\n  // Note: retry();\n}\n",
+            "Note: retry();",
+        ),
+    ] {
+        let file = source_at(name, source);
+        let (dead, prose) = split(&file, &cfg);
+        assert!(
+            dead.is_empty(),
+            "{body:?} is a bare call or label and must stay prose: {dead:?}"
+        );
+        assert_eq!(
+            bodies(&prose),
+            vec![body],
+            "{body:?} must stay a per-node prose finding"
+        );
+    }
+}
+
+/// spec: Commented-out code / Formula and annotation shapes stay prose.
+#[test]
+fn formula_and_annotation_shapes_stay_prose() {
+    let cfg = Config::default();
+    for (name, source, body) in [
+        ("formula.rs", "// E = m * c^2\n", "E = m * c^2"),
+        ("formula.py", "# E = m * c ** 2\n", "E = m * c ** 2"),
+        ("formula.ts", "// E = m * c ** 2;\n", "E = m * c ** 2;"),
+        (
+            "annotation.rs",
+            "fn check(x: i32) {\n    // x = 1;\n    assert_eq!(x, 1);\n}\n",
+            "x = 1;",
+        ),
+        (
+            "annotation.py",
+            "def check(x):\n    # x = 1\n    assert x == 1\n",
+            "x = 1",
+        ),
+        (
+            "annotation.ts",
+            "function check(x: number) {\n  // x = 1;\n  assert(x === 1);\n}\n",
+            "x = 1;",
+        ),
+    ] {
+        let file = source_at(name, source);
+        let (dead, prose) = split(&file, &cfg);
+        assert!(
+            dead.is_empty(),
+            "{body:?} is a formula or expected-value annotation and must stay prose: {dead:?}"
+        );
+        assert_eq!(
+            bodies(&prose),
+            vec![body],
+            "{body:?} must stay a per-node prose finding"
+        );
+    }
+}
+
+/// spec: Commented-out code / Separator bodies never reach the block class.
+#[test]
+fn separator_bodies_never_reach_the_block_class() {
+    let cfg = Config::default();
+    for (name, source, nodes) in [
+        (
+            "separator.rs",
+            "// =================\n// =================\n",
+            2,
+        ),
+        ("separator.py", "# =====\n", 1),
+        ("separator.rs", "/* ----- */\n", 1),
+    ] {
+        let file = source_at(name, source);
+        let (dead, prose) = split(&file, &cfg);
+        assert!(
+            dead.is_empty(),
+            "{name}: a separator body never enters the block class: {dead:?}"
+        );
+        assert_eq!(prose.len(), nodes, "{name}: every member stays prose");
+        assert!(
+            prose
+                .iter()
+                .all(|finding| !finding.text.chars().any(char::is_alphanumeric)),
+            "{name}: separator bodies carry no alphanumeric character"
+        );
+    }
 }
 
 /// spec: Prose outside channels / Predicate miss keeps per-node prose.

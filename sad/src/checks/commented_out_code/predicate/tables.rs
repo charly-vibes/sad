@@ -1,8 +1,11 @@
 //! Purpose: hold the pinned per-language kind tables the commented-out-code
 //! predicate consults.
-//! Responsibilities: define the closed `Tables` shape (root-allow, shape,
-//! argument-shape, root-deny, payload-deny), transcribe the Rust, Python, and
-//! TypeScript tables, and answer the language-to-table lookup.
+//! Responsibilities: define the closed `Tables` shape (root-allow, code-shape,
+//! root-deny, payload-deny), transcribe the Rust, Python, and TypeScript
+//! tables, and answer the language-to-table lookup. `code_shape` lists only
+//! declarations and control statements; bare expression kinds are absent, so
+//! a call, assignment, new-expression, formula, or annotation root stays
+//! prose.
 //! Rationale: the tables are the predicate's only language knowledge, so they
 //! live apart from the rules that consume them and give a grammar bump exactly
 //! one audit point. They are transcribed against tree-sitter-rust 0.24,
@@ -15,8 +18,7 @@ use crate::model::Language;
 /// One language's closed kind tables.
 pub(super) struct Tables {
     pub(super) root_allow: &'static [&'static str],
-    pub(super) shape: &'static [&'static str],
-    pub(super) argument_shape: &'static [&'static str],
+    pub(super) code_shape: &'static [&'static str],
     pub(super) root_deny: &'static [&'static str],
     pub(super) payload_deny: &'static [&'static str],
 }
@@ -53,23 +55,18 @@ static RUST: Tables = Tables {
         "union_item",
         "use_declaration",
     ],
-    shape: &[
-        "assignment_expression",
-        "call_expression",
-        "compound_assignment_expr",
+    code_shape: &[
         "const_item",
         "enum_item",
         "extern_crate_declaration",
         "for_expression",
         "foreign_mod_item",
         "function_item",
-        "function_signature_item",
         "if_expression",
         "impl_item",
         "let_declaration",
         "loop_expression",
         "macro_definition",
-        "macro_invocation",
         "match_expression",
         "mod_item",
         "static_item",
@@ -80,7 +77,6 @@ static RUST: Tables = Tables {
         "use_declaration",
         "while_expression",
     ],
-    argument_shape: &["return_expression"],
     root_deny: &["function_signature_item"],
     payload_deny: &[
         "binary_expression",
@@ -118,10 +114,7 @@ static PYTHON: Tables = Tables {
         "while_statement",
         "with_statement",
     ],
-    shape: &[
-        "assignment",
-        "augmented_assignment",
-        "call",
+    code_shape: &[
         "class_definition",
         "decorated_definition",
         "for_statement",
@@ -136,7 +129,6 @@ static PYTHON: Tables = Tables {
         "while_statement",
         "with_statement",
     ],
-    argument_shape: &["raise_statement", "return_statement"],
     root_deny: &[],
     payload_deny: &[
         "binary_operator",
@@ -187,11 +179,8 @@ static TYPESCRIPT: Tables = Tables {
         "variable_declaration",
         "while_statement",
     ],
-    shape: &[
+    code_shape: &[
         "abstract_class_declaration",
-        "assignment_expression",
-        "augmented_assignment_expression",
-        "call_expression",
         "class_declaration",
         "do_statement",
         "enum_declaration",
@@ -199,21 +188,18 @@ static TYPESCRIPT: Tables = Tables {
         "for_in_statement",
         "for_statement",
         "function_declaration",
-        "function_signature",
         "generator_function_declaration",
         "if_statement",
         "import_statement",
         "interface_declaration",
         "internal_module",
         "lexical_declaration",
-        "new_expression",
         "switch_statement",
         "try_statement",
         "type_alias_declaration",
         "variable_declaration",
         "while_statement",
     ],
-    argument_shape: &["return_statement", "throw_statement"],
     root_deny: &[
         "ambient_declaration",
         "function_signature",

@@ -1,0 +1,9 @@
+id = "call-shaped-examples-stay-prose"
+description = "Each bare call, new-expression, and labeled statement stays a per-node prose finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "call_shaped_examples_stay_prose"}]

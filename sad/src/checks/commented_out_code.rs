@@ -89,14 +89,19 @@ impl Checker {
 
     /// Parse `body` with the pinned frontend and apply the static predicate.
     ///
-    /// Bodies within both bounds parse as one unit, exactly as before. Longer
-    /// bodies are parsed chunk-wise, cut at line boundaries and packed up to
+    /// A body with no alphanumeric character is a separator or ruler, never
+    /// code, so it is rejected before the parser and cannot reach the block
+    /// class. Bodies within both bounds parse as one unit, exactly as before.
+    /// Longer bodies are parsed chunk-wise, cut at line boundaries and packed up to
     /// both bounds; the run matches when any chunk matches, so a dead-code
     /// item wholly inside one chunk stays visible. A chunk boundary that
     /// splits a construct fails closed to prose (the per-node findings still
     /// report it), and a single line longer than the byte bound fails closed
     /// the same way.
     fn parses_as_code(&mut self, language: Language, body: &str) -> bool {
+        if !body.chars().any(char::is_alphanumeric) {
+            return false;
+        }
         let Some(parser) = self.parsers[parser_slot(language)].as_mut() else {
             return false;
         };
@@ -164,7 +169,7 @@ fn finding(file: &AnalyzedFile, anchor: &CommentNode, body: String) -> Finding {
         symbol_path: anchor.symbol_path.clone(),
         message: MESSAGE.to_string(),
         text: body,
-        severity: Severity::Warning,
+        severity: Severity::Error,
         smell: Some(Smell::CommentedOutCode),
         remediation: remediation::for_smell(Smell::CommentedOutCode, &file.path),
     }

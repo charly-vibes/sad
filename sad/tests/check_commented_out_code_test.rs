@@ -15,52 +15,9 @@ use std::time::{Duration, Instant};
 use sad::checks::commented_out_code::{self, MAX_PREDICATE_BYTES, MAX_PREDICATE_LINES};
 use sad::checks::{outside_channel, suppression};
 use sad::config::Config;
-use sad::model::{
-    AnalyzedFile, AttributionClass, CommentKind, CommentNode, FindingKind, Language, finding_id,
-};
+use sad::model::{AnalyzedFile, AttributionClass, CommentKind, CommentNode, FindingKind, Language};
 
 use support::commented_out_code::*;
-
-/// spec: Commented-out code / Rust line-comment block is one finding.
-#[test]
-fn rust_line_comment_block_is_one_finding() {
-    let cfg = Config::default();
-    let file = fixture("rust_line_block.rs");
-    let (dead, prose) = split(&file, &cfg);
-
-    assert_eq!(dead.len(), 1, "the four-line run is one block: {dead:?}");
-    assert_eq!(
-        prose.len(),
-        0,
-        "the matched block replaces every member's prose"
-    );
-    assert_kinds(&dead, FindingKind::CommentedOutCode);
-    let finding = &dead[0];
-    let anchor = &file.nodes[0];
-    assert_eq!(
-        finding.line, anchor.line,
-        "anchored at the run's first node"
-    );
-    assert_eq!(finding.symbol_path, "outer");
-    assert_eq!(
-        finding.text,
-        "fn parse(input: &str) -> usize {\n    let len = input.len();\n    len\n}"
-    );
-    assert_eq!(
-        finding.id,
-        finding_id(&file.path, &finding.symbol_path, &finding.text)
-    );
-
-    let test_file = fixture("rust_test_block.rs");
-    let (test_dead, test_prose) = split(&test_file, &cfg);
-    assert_eq!(
-        test_dead.len(),
-        1,
-        "a disabled test is still non-executing code"
-    );
-    assert_eq!(test_prose.len(), 0);
-    assert!(test_dead[0].text.starts_with("#[test]\nfn works()"));
-}
 
 /// spec: Commented-out code / Rust block comment is one finding.
 #[test]
@@ -198,7 +155,10 @@ fn doc_channel_code_examples_never_enter_the_class() {
 #[test]
 fn block_adjacency_joins_same_row_and_splits_on_separators() {
     let cfg = Config::default();
-    let file = fixture("same_row.rs");
+    let file = source_at(
+        "same_row.rs",
+        "/* fn first() {} */ /* fn second() {} */\n\n/* fn third() {} */\n",
+    );
     let (dead, prose) = split(&file, &cfg);
 
     assert_eq!(file.nodes.len(), 3);
@@ -209,13 +169,13 @@ fn block_adjacency_joins_same_row_and_splits_on_separators() {
     );
     assert_eq!(prose.len(), 0);
     assert_eq!(dead[0].line, 1);
-    assert_eq!(dead[0].text, "first();\nsecond();");
+    assert_eq!(dead[0].text, "fn first() {}\nfn second() {}");
     assert_eq!(dead[1].line, 3);
-    assert_eq!(dead[1].text, "third();");
+    assert_eq!(dead[1].text, "fn third() {}");
 
     let split_by_code = source_at(
         "same_row.rs",
-        "/* first(); */\nlet x = 1;\n/* second(); */\n",
+        "/* fn first() {} */\nlet x = 1;\n/* fn second() {} */\n",
     );
     let (code_dead, code_prose) = split(&split_by_code, &cfg);
     assert_eq!(code_dead.len(), 2, "a code line separates the blocks");

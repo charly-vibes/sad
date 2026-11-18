@@ -1,0 +1,9 @@
+id = "separator-bodies-never-reach-the-block-class"
+description = "No commented_out_code finding is emitted and each node stays a per-node prose finding because the body is rejected before parsing."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "separator_bodies_never_reach_the_block_class"}]

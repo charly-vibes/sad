@@ -1,0 +1,9 @@
+id = "documentation-call-example-is-a-known-false-positive"
+description = "No commented_out_code finding is emitted; the previously accepted false positive now stays prose under the call-shaped rule."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "call_shaped_examples_stay_prose"}]

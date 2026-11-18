@@ -1,0 +1,9 @@
+id = "formula-and-annotation-shapes-stay-prose"
+description = "Each formula and expected-value annotation stays a per-node prose finding because a root of bare expressions is not code-shaped."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "formula_and_annotation_shapes_stay_prose"}]
