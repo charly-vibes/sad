@@ -1,0 +1,9 @@
+id = "file-with-no-commit-is-analyzed"
+description = "A never-committed file has no governing revision and is analyzed in default mode."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "uncommitted_new_files_are_analyzed_and_have_no_governing_revision"}]

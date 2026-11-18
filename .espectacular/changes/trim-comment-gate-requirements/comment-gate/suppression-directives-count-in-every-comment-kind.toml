@@ -1,0 +1,9 @@
+id = "suppression-directives-count-in-every-comment-kind"
+description = "Directives in line and block comments are recognized as suppression and counted in suppression_debt."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "every_directive_form_is_counted_once_in_source_order"}]

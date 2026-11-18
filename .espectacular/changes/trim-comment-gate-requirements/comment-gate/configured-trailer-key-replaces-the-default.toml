@@ -1,0 +1,9 @@
+id = "configured-trailer-key-replaces-the-default"
+description = "Only commits carrying the configured attribution trailer key are in scope."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "configured_trailer_override_replaces_the_default_key"}]

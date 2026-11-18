@@ -1,0 +1,9 @@
+id = "spec-reference-resolves"
+description = "A marker citing an openspec spec id is marker-channel and emits no finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "openspec_resolver_satisfies_a_cited_marker"}]

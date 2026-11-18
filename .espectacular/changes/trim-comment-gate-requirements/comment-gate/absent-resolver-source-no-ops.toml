@@ -1,0 +1,9 @@
+id = "absent-resolver-source-no-ops"
+description = "Marker resolution is skipped when no resolver source exists, so no unresolvable_marker findings are emitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "fabricated_marker_is_ignored_when_its_resolver_source_is_absent"}]

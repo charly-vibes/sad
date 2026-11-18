@@ -1,0 +1,9 @@
+id = "same-command-both-modes"
+description = "The identical sad check invocation produces the same envelope and exit code as pre-hook and in CI."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "hooks_and_ci_see_identical_results"}, {flags = "repeated_runs_are_deterministic"}]
