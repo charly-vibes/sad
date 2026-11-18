@@ -26,9 +26,9 @@ release:
 test:
     #!/usr/bin/env bash
     set -uo pipefail
-    if [ ! -d .testaruda ]; then
-      testaruda init || { echo "❌ testaruda init failed" >&2; exit 1; }
-    fi
+    # `testaruda init` is idempotent; a bare directory is not proof of a
+    # usable store (a version probe can create it before init runs).
+    testaruda init || { echo "❌ testaruda init failed" >&2; exit 1; }
     code=0
     testaruda exec || code=$?
     case "$code" in
