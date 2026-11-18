@@ -1,0 +1,119 @@
+{
+  "ok": true,
+  "envelope_version": "0.1",
+  "cli_version": "0.1.0",
+  "envelope_kind": "ok",
+  "data": {
+    "schema_version": "brief.v1",
+    "as_of": "2026-11-18",
+    "generated_at": "2026-11-18T21:12:09.402231052Z",
+    "sources": [
+      {
+        "name": "beads",
+        "status": "present",
+        "observed_at": "2026-11-18T20:45:47Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "git",
+        "status": "present",
+        "observed_at": "2026-11-18T20:45:54Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "openspec",
+        "status": "present",
+        "observed_at": "2026-11-18T20:45:23.962548181Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "whisper",
+        "status": "present",
+        "observed_at": "2026-11-18T20:46:57Z",
+        "staleness": "fresh",
+        "detail": null
+      },
+      {
+        "name": "curation",
+        "status": "present",
+        "observed_at": "2026-11-18T21:12:09.395748487Z",
+        "staleness": "fresh",
+        "detail": null
+      }
+    ],
+    "curation": {
+      "updated_at": "2026-11-18T21:12:09.395748487Z",
+      "confirmed_at": null
+    },
+    "purpose_lite": null,
+    "focus": [],
+    "in_flight": [],
+    "blocked": [],
+    "next": [],
+    "parked": [],
+    "needs_retriage": [],
+    "recent": [
+      {
+        "sha": "0f559bdc6572231e58ec2acf26ff318ae5c6b696",
+        "committed_at": "2026-11-18T20:45:54Z",
+        "subject": "feat(gate): honor .gitignore during source discovery (sad-z6q)",
+        "outcome": null
+      },
+      {
+        "sha": "ce23e404426ee584e50ac5829656537b9cdb944e",
+        "committed_at": "2026-11-18T20:29:46Z",
+        "subject": "chore(openspec): archive six gate changes and deploy 16 contracts",
+        "outcome": null
+      },
+      {
+        "sha": "34969ba5dad4cb5446246365dc02fe8e36887559",
+        "committed_at": "2026-11-18T20:27:35Z",
+        "subject": "docs(gate): document the six field-fixes and record the gitignore decision",
+        "outcome": null
+      },
+      {
+        "sha": "8721ff4f91a00df8f713bb38283a9cc6ef7faabe",
+        "committed_at": "2026-11-18T20:27:16Z",
+        "subject": "feat(gate): raise commented_out_code precision and restore error severity",
+        "outcome": null
+      },
+      {
+        "sha": "be40a39399ceff2f8e28d46f73f940dba9f28966",
+        "committed_at": "2026-11-18T20:27:10Z",
+        "subject": "feat(gate): name skipped source directories and gate .pyi stubs",
+        "outcome": null
+      }
+    ],
+    "health": {
+      "status": "amber",
+      "basis": "signals",
+      "signals": [
+        {
+          "kind": "orphan_commits",
+          "reason": "42 commits in the 14-day window link no tracker id or open work-item path: 07ba59ae3a257e63ec7a2a541a44107bcb358939 (feat: scaffold sad — documentation gate CLI (family setup)); 0c3c8ce92dec9554297912ca151bccc4000a3cb7 (feat(gate): triage comment smells by severity (sad-66v)); 0f559bdc6572231e58ec2acf26ff318ae5c6b696 (feat(gate): honor .gitignore during source discovery (sad-z6q)); 15e964e0a2f35192a48f250342db074f4ba1bd42 (chore(openspec): archive comment-smell-triage and deploy 36 contracts); 1747a76ad6fdc3925da91f6e160c1f1135efd5b0 (docs(openspec): trim three over-long comment-gate requirements (sad-h6d)); 22f047e15aee25496a3de17eb728f7b63342e48e (docs(beads): fan out specify-gate-objective implementation — close sad-lcy (spec landed), 12 impl tickets + 2 follow-ups); 23bdf3e5ee37af43d126e8f25d046e4e0d30605a (chore(openspec): archive commented_out_code and spec-trim changes); 2abebd0e2b1a8001802900d404771ee216ee5159 (feat(sad): baseline adoption, resolver toggles, coverage stats, self-host gate (sad-qx6, sad-1dj, sad-5b6, sad-iv5)); 34969ba5dad4cb5446246365dc02fe8e36887559 (docs(gate): document the six field-fixes and record the gitignore decision); 351773182dd8dc84314183f7875e90f7a4ce0bc7 (docs(beads): issue-review pass — metadata.files + base_commit anchors, lane/complexity labels, file-header ACs + anti-goals); 36e294881d63d55824a2e947e7ae1d8a8d19b034 (docs: implemented-gate status, validation telemetry page, changelog (sad-b6y, sad-ypf, sad-9m9)); 3b9bda1b4bb49e1c844419b9c8f9558d1aa4bd77 (chore: ignore local turu (.whisper) store); 3d8df94c3d98be3cc27cb2307a964cd7df40bddf (feat(sad): commented_out_code block-scoped finding class (sad-wfj)); 40bb3c95ba506beff8f61e58619cfff62b75506e (docs: swap banner to Elton John quote); 49b1ddc7785bd22ac9df2416f266529e8b86c11e (docs(openspec): revise comment-smell-triage after Rule-of-5 review); 52a79489b54ba30b019ecde130b853e6486b70de (docs(openspec): specify-gate-objective proposal — comment-gate spec (10 EARS reqs, 24 scenarios), design w/ evidence ledger + validation plan; wai research record (8-provider evidence review) + rule-of-5 review); 573ec63c5656a760cf046035cdff4a2eafaf0d4f (feat(gate): harden field-test defects — identity, scope, JS, bounded predicate); 59bed3ddd734c7a9dfc2cb663b17129c8ef87ff2 (fix(ci): always run idempotent testaruda init in the test recipe); 5c9af2f16ca956bfc5ce8ec1859ab64e5c2b9013 (feat(gate): exempt Python file metadata, accept @ts-expect-error, widen licence exemptions); 5d271c04aadefa83b1b61139dc8f15e2461d6e1f (feat(gate): report unreadable sources instead of skipping silently); 618fe734a1e5ffdda4372e0ecd9f1dcaa2d2a637 (docs(gate): document the severity and smell triage model); 633161bc110142cd4dac3570c9cdb694dac9a8bb (docs(openspec): propose comment-smell-triage); 647d8e2f430306d7b2f7f75aed6064eba2dddd6f (fix(ci): pin pretender 0.10.0 — the baseline was ratified against it); 725a873c47fc547edaa8e4958bf01c011ca8acbe (docs: validation review fix-ups + self-gate in just ci (sad-ypf, sad-9m9)); 7e8146a1c99162a326b16fc7f0db2f18b2e1aaeb (Initial commit); 838d9f2f58fd078474be331c909aa53565b26bbf (chore(beads): file sad-xx4 (commented_out_code spec delta, blocks sad-wfj), sad-h6d (deployed spec lint); export); 85e568a82cca2ebaf9347196b330dc78d466863e (fix(ci): pin pretender 0.11.1 — 0.11.0 was never published to crates.io); 8611a9d9420a23325d366d74dba7097134b3b5b9 (chore(ddl): conform sad to the fleet standard (sad-8b7)); 8721ff4f91a00df8f713bb38283a9cc6ef7faabe (feat(gate): raise commented_out_code precision and restore error severity); 8c3ef3558fc945294ee6daa53d4968ffdcf79bd0 (docs: apply rule-of-5 review — gate-model page, staleness fixes, prerequisites); 9614c1b049378fb73349dc99eb019861a00cb359 (chore(beads): close sad-xx4, sad-wfj, sad-h6d, sad-vmp, sad-8b7; export); 9645b8be7a601bc438f177c80fd2856503a771ce (feat(release): mirror pretender release pipeline (sad-vmp)); 99a0ff70145e2a275090f91b7bc06fa4936b945c (docs: gate model v2 — summary-lead cap, dogfood-only header, attribution scoping, suppression cap; runnable hook/CI wiring (sad-b6y)); 9aba246dc7b2ab58c17478092b2264ffa327e3fe (docs(openspec): add commented_out_code spec delta (sad-xx4)); b6c47f99c2e7fbfb52d37239582af2d6950b6df3 (chore: init wai workspace); bc90d1033f62e773bb47d9fe3e2a451c301189d9 (chore(beads): close implemented tickets; follow-ups for commented_out_code, ddl registration, release, topics); be15550c6309ff4a10041d5f8d1493ed13f85982 (fix(release): drop crates.io publish — the 'sad' crate name is taken); be40a39399ceff2f8e28d46f73f940dba9f28966 (feat(gate): name skipped source directories and gate .pyi stubs); c29d7988f48fe133f156db93853f0286e2eb1dc3 (docs(beads): capture grill-me gate design — comment on sad-lcy, export issues.jsonl); ce23e404426ee584e50ac5829656537b9cdb944e (chore(openspec): archive six gate changes and deploy 16 contracts); d849f2500f2f2d7b9f969488008e666bac5410bf (feat(sad): documentation gate core — config, tree-sitter extraction, channel checks, genesis Check envelope, adoption baseline); e52a03b621c5cd580464f86c5f9beed1b042a871 (chore(openspec): archive specify-gate-objective — deploy spec + contracts)"
+        }
+      ],
+      "owner": null,
+      "reason": "orphan_commits: 42 commits in the 14-day window link no tracker id or open work-item path: 07ba59ae3a257e63ec7a2a541a44107bcb358939 (feat: scaffold sad — documentation gate CLI (family setup)); 0c3c8ce92dec9554297912ca151bccc4000a3cb7 (feat(gate): triage comment smells by severity (sad-66v)); 0f559bdc6572231e58ec2acf26ff318ae5c6b696 (feat(gate): honor .gitignore during source discovery (sad-z6q)); 15e964e0a2f35192a48f250342db074f4ba1bd42 (chore(openspec): archive comment-smell-triage and deploy 36 contracts); 1747a76ad6fdc3925da91f6e160c1f1135efd5b0 (docs(openspec): trim three over-long comment-gate requirements (sad-h6d)); 22f047e15aee25496a3de17eb728f7b63342e48e (docs(beads): fan out specify-gate-objective implementation — close sad-lcy (spec landed), 12 impl tickets + 2 follow-ups); 23bdf3e5ee37af43d126e8f25d046e4e0d30605a (chore(openspec): archive commented_out_code and spec-trim changes); 2abebd0e2b1a8001802900d404771ee216ee5159 (feat(sad): baseline adoption, resolver toggles, coverage stats, self-host gate (sad-qx6, sad-1dj, sad-5b6, sad-iv5)); 34969ba5dad4cb5446246365dc02fe8e36887559 (docs(gate): document the six field-fixes and record the gitignore decision); 351773182dd8dc84314183f7875e90f7a4ce0bc7 (docs(beads): issue-review pass — metadata.files + base_commit anchors, lane/complexity labels, file-header ACs + anti-goals); 36e294881d63d55824a2e947e7ae1d8a8d19b034 (docs: implemented-gate status, validation telemetry page, changelog (sad-b6y, sad-ypf, sad-9m9)); 3b9bda1b4bb49e1c844419b9c8f9558d1aa4bd77 (chore: ignore local turu (.whisper) store); 3d8df94c3d98be3cc27cb2307a964cd7df40bddf (feat(sad): commented_out_code block-scoped finding class (sad-wfj)); 40bb3c95ba506beff8f61e58619cfff62b75506e (docs: swap banner to Elton John quote); 49b1ddc7785bd22ac9df2416f266529e8b86c11e (docs(openspec): revise comment-smell-triage after Rule-of-5 review); 52a79489b54ba30b019ecde130b853e6486b70de (docs(openspec): specify-gate-objective proposal — comment-gate spec (10 EARS reqs, 24 scenarios), design w/ evidence ledger + validation plan; wai research record (8-provider evidence review) + rule-of-5 review); 573ec63c5656a760cf046035cdff4a2eafaf0d4f (feat(gate): harden field-test defects — identity, scope, JS, bounded predicate); 59bed3ddd734c7a9dfc2cb663b17129c8ef87ff2 (fix(ci): always run idempotent testaruda init in the test recipe); 5c9af2f16ca956bfc5ce8ec1859ab64e5c2b9013 (feat(gate): exempt Python file metadata, accept @ts-expect-error, widen licence exemptions); 5d271c04aadefa83b1b61139dc8f15e2461d6e1f (feat(gate): report unreadable sources instead of skipping silently); 618fe734a1e5ffdda4372e0ecd9f1dcaa2d2a637 (docs(gate): document the severity and smell triage model); 633161bc110142cd4dac3570c9cdb694dac9a8bb (docs(openspec): propose comment-smell-triage); 647d8e2f430306d7b2f7f75aed6064eba2dddd6f (fix(ci): pin pretender 0.10.0 — the baseline was ratified against it); 725a873c47fc547edaa8e4958bf01c011ca8acbe (docs: validation review fix-ups + self-gate in just ci (sad-ypf, sad-9m9)); 7e8146a1c99162a326b16fc7f0db2f18b2e1aaeb (Initial commit); 838d9f2f58fd078474be331c909aa53565b26bbf (chore(beads): file sad-xx4 (commented_out_code spec delta, blocks sad-wfj), sad-h6d (deployed spec lint); export); 85e568a82cca2ebaf9347196b330dc78d466863e (fix(ci): pin pretender 0.11.1 — 0.11.0 was never published to crates.io); 8611a9d9420a23325d366d74dba7097134b3b5b9 (chore(ddl): conform sad to the fleet standard (sad-8b7)); 8721ff4f91a00df8f713bb38283a9cc6ef7faabe (feat(gate): raise commented_out_code precision and restore error severity); 8c3ef3558fc945294ee6daa53d4968ffdcf79bd0 (docs: apply rule-of-5 review — gate-model page, staleness fixes, prerequisites); 9614c1b049378fb73349dc99eb019861a00cb359 (chore(beads): close sad-xx4, sad-wfj, sad-h6d, sad-vmp, sad-8b7; export); 9645b8be7a601bc438f177c80fd2856503a771ce (feat(release): mirror pretender release pipeline (sad-vmp)); 99a0ff70145e2a275090f91b7bc06fa4936b945c (docs: gate model v2 — summary-lead cap, dogfood-only header, attribution scoping, suppression cap; runnable hook/CI wiring (sad-b6y)); 9aba246dc7b2ab58c17478092b2264ffa327e3fe (docs(openspec): add commented_out_code spec delta (sad-xx4)); b6c47f99c2e7fbfb52d37239582af2d6950b6df3 (chore: init wai workspace); bc90d1033f62e773bb47d9fe3e2a451c301189d9 (chore(beads): close implemented tickets; follow-ups for commented_out_code, ddl registration, release, topics); be15550c6309ff4a10041d5f8d1493ed13f85982 (fix(release): drop crates.io publish — the 'sad' crate name is taken); be40a39399ceff2f8e28d46f73f940dba9f28966 (feat(gate): name skipped source directories and gate .pyi stubs); c29d7988f48fe133f156db93853f0286e2eb1dc3 (docs(beads): capture grill-me gate design — comment on sad-lcy, export issues.jsonl); ce23e404426ee584e50ac5829656537b9cdb944e (chore(openspec): archive six gate changes and deploy 16 contracts); d849f2500f2f2d7b9f969488008e666bac5410bf (feat(sad): documentation gate core — config, tree-sitter extraction, channel checks, genesis Check envelope, adoption baseline); e52a03b621c5cd580464f86c5f9beed1b042a871 (chore(openspec): archive specify-gate-objective — deploy spec + contracts)"
+    },
+    "truncation": {
+      "applied": true,
+      "omitted_counts": {
+        "recent": 37
+      }
+    },
+    "head_sha": "0f559bdc6572231e58ec2acf26ff318ae5c6b696",
+    "source_hash": "fcfa7a8b9c87d1ed82dc90331b9714992b889552cca001d9a537f1c97b311ff1",
+    "warnings": []
+  },
+  "warnings": [],
+  "hints": [],
+  "meta": {
+    "duration_ms": 0,
+    "tx": null,
+    "request_id": null
+  }
+}
