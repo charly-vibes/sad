@@ -1,0 +1,9 @@
+id = "wrapped-one-sentence-summary-passes"
+description = "A summary sentence wrapped over four /// lines followed by structured sections produces no doc finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "wrapped_one_sentence_summary_passes_the_cap"}]

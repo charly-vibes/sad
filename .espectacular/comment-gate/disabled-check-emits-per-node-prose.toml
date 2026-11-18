@@ -1,5 +1,5 @@
 id = "disabled-check-emits-per-node-prose"
-description = "Every finding-eligible prose node emits comment_outside_channel per node and no commented_out_code finding is emitted, so the file is never silent."
+description = "With the check off, every prose node emits comment_outside_channel and no commented_out_code finding appears, so the file is never silent."
 archetype = "PF"
 status = "active"
 superseded_by = ""

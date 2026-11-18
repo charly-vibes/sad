@@ -1,5 +1,5 @@
 id = "predicate-miss-keeps-per-node-prose"
-description = "Each finding-eligible prose node in the run still emits its own comment_outside_channel finding, with its unchanged stable ID."
+description = "When the run's normalized body does not parse, each prose node keeps its own comment_outside_channel finding with its unchanged ID."
 archetype = "PF"
 status = "active"
 superseded_by = ""

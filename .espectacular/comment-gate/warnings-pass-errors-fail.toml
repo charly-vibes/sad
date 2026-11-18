@@ -1,0 +1,9 @@
+id = "warnings-pass-errors-fail"
+description = "A warning-only run yields ok: true, exit 0, and findings_blocking 0 while the findings stay in the data."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "warning_findings_pass_by_default_and_fail_strict"}]

@@ -3,7 +3,7 @@ description = "The envelope carries a suppression_debt entry for the noqa and no
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "noqa_node_is_suppression_and_counted"}]
+cargo = [{flags = "noqa_node_is_suppression_and_counted"}, {flags = "suppression_debt_is_reported_not_a_finding"}]

@@ -1,0 +1,9 @@
+id = "warning-only-run-passes-by-default-and-fails-strict"
+description = "A warning-only run exits 0 by default and exits 1 with ok: false under --strict."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "warning_findings_pass_by_default_and_fail_strict"}]

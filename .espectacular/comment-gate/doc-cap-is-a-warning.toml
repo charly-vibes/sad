@@ -1,0 +1,9 @@
+id = "doc-cap-is-a-warning"
+description = "A doc summary over the sentence cap yields a doc_summary_cap_exceeded finding with smell doc_cap and severity warning."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "rust_block_two_sentence_summary_exceeds_the_cap"}, {flags = "two_line_doc_lead_exceeds_the_default_cap"}]

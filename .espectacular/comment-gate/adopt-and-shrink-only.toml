@@ -1,5 +1,5 @@
 id = "adopt-and-shrink-only"
-description = "The adopted baseline suppresses grandfathered IDs and the fixed tree passes; re-adopting a superset baseline fails the run."
+description = "Adoption writes the IDs, the baseline suppresses them and a fixed tree passes, and re-adopting a superset fails the run."
 archetype = "PF"
 status = "active"
 superseded_by = ""

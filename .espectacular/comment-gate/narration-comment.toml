@@ -1,9 +1,9 @@
 id = "narration-comment"
-description = "A comment_outside_channel finding is emitted with a stable ID anchored to the enclosing symbol path."
+description = "A comment_outside_channel finding is emitted for the narration with a stable symbol-path-anchored ID and severity error."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "narration_comment_in_a_rust_fn_body_is_one_finding"}]
+cargo = [{flags = "narration_comment_in_a_rust_fn_body_is_one_finding"}, {flags = "narration_errors_block_the_default_run"}]

@@ -1,9 +1,9 @@
 id = "typescript-and-python-parity"
-description = "TypeScript and Python fixtures produce the same class assignment pattern as Rust."
+description = "TypeScript and Python fixtures yield the same class assignment pattern as the Rust fixture."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "python_one_node_per_class"}, {flags = "typescript_one_node_per_class"}]
+cargo = [{flags = "python_one_node_per_class"}, {flags = "typescript_one_node_per_class"}, {flags = "python_safety_and_module_docstring_attribute_apart"}, {flags = "typescript_why_and_module_header_attribute_apart"}]

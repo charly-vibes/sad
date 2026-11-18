@@ -3,7 +3,7 @@ description = "suppression_cap_exceeded is emitted above the configured cap and 
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
 cargo = [{flags = "cap_breach_emits_one_file_scoped_finding"}, {flags = "default_suppression_cap_is_off"}]

@@ -1,0 +1,9 @@
+id = "a-new-error-blocks-a-new-warning-does-not"
+description = "Adding one narration comment and one banner leaves stats.findings at 2 with findings_blocking at 1, so the run still fails."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_warning_does_not_mask_a_blocking_error"}, {flags = "a_new_finding_outside_the_baseline_is_still_reported"}]

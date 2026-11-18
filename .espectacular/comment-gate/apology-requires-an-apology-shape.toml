@@ -1,0 +1,9 @@
+id = "apology-requires-an-apology-shape"
+description = "An apology shape without a resolvable marker is smell apology with severity error, while a bare temporary stays a warning."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "bare_temporary_is_unclassified_but_apology_shapes_are_errors"}]

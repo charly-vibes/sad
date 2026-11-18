@@ -1,0 +1,9 @@
+id = "multi-line-prose-is-judged-as-one-run"
+description = "All three split lines are one run: every finding carries narration and error, and each keeps its own stable ID."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "every_member_of_a_three_line_run_carries_narration"}, {flags = "classification_preserves_ids_lines_symbols_and_text"}]

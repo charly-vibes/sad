@@ -1,0 +1,9 @@
+id = "structural-findings-are-errors-with-a-null-smell"
+description = "Each of missing_header, unresolvable_marker, and suppression_cap_exceeded carries smell: null and severity: error."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "every_finding_carries_severity_and_smell"}, {flags = "structural_findings_carry_error_severity_and_a_null_smell"}]

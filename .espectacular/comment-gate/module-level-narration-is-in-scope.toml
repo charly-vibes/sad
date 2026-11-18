@@ -1,0 +1,9 @@
+id = "module-level-narration-is-in-scope"
+description = "A code-restating comment before a module's top-level statement is classified by the same narration rule."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_module_level_python_statement_is_narrated"}]

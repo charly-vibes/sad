@@ -1,0 +1,9 @@
+id = "error-findings-fail-the-run"
+description = "At least one new error yields ok: false, exit 1, and findings_blocking equal to the error count."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "narration_errors_block_the_default_run"}, {flags = "a_warning_does_not_mask_a_blocking_error"}]

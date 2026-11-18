@@ -1,0 +1,9 @@
+id = "directive-does-not-silence-an-error-smell"
+description = "The directive is counted in suppression_debt while the narration finding stays severity error and the run fails."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_suppression_directive_does_not_silence_an_error"}, {flags = "suppression_debt_is_reported_not_a_finding"}]

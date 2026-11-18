@@ -1,9 +1,9 @@
 id = "remediation-entry"
-description = "The finding carries a hardcoded remediation entry."
+description = "Every narration, apology, banner, unclassified, and doc-cap finding carries hardcoded remediation naming its structural dispositions, never a bare delete for an informative comment."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "findings_fail_the_run_with_a_stable_id_and_remediation"}]
+cargo = [{flags = "findings_fail_the_run_with_a_stable_id_and_remediation"}, {flags = "remediation_is_per_kind"}, {flags = "remediation_descriptions_name_the_fix"}, {flags = "unclassified_guidance_names_channels_and_conditions_deletion"}, {flags = "apology_guidance_names_the_marker_channel"}, {flags = "a_separator_commented_out_code_body_is_a_banner"}]

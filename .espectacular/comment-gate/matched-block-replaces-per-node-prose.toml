@@ -1,5 +1,5 @@
 id = "matched-block-replaces-per-node-prose"
-description = "One commented_out_code finding is emitted for the block and none of its member nodes emits a comment_outside_channel finding."
+description = "One commented_out_code finding covers the block and no member node emits a comment_outside_channel finding."
 archetype = "PF"
 status = "active"
 superseded_by = ""

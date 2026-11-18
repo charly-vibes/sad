@@ -1,9 +1,9 @@
 id = "todo-stub"
-description = "A comment_outside_channel finding is emitted; TODO prose is not a channel."
+description = "The uncited TODO is a comment_outside_channel finding carrying smell todo and severity error."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "module_level_todo_is_file_scoped_prose"}]
+cargo = [{flags = "module_level_todo_is_file_scoped_prose"}, {flags = "an_uncited_todo_is_a_todo_smell_and_an_error"}]

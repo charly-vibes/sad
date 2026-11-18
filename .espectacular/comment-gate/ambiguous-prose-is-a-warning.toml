@@ -1,0 +1,9 @@
+id = "ambiguous-prose-is-a-warning"
+description = "A run matching no smell rule, or with no next statement, carries smell unclassified and severity warning."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_comment_with_no_next_statement_is_unclassified"}, {flags = "bare_temporary_is_unclassified_but_apology_shapes_are_errors"}]

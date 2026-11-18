@@ -1,0 +1,9 @@
+id = "whole-tree-run-is-the-inventory"
+description = "A baseline-less --all run reports every finding and exits 1 only when an error-severity finding exists."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "without_a_baseline_the_gate_fails_closed"}, {flags = "warning_findings_pass_by_default_and_fail_strict"}]

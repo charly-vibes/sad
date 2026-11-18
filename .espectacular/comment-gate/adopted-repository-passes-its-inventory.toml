@@ -1,0 +1,9 @@
+id = "adopted-repository-passes-its-inventory"
+description = "Rerunning an adopted repository reports stats.findings zero whether the adopted tree held warnings or errors."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "adoption_records_both_warning_and_error_ids"}, {flags = "adoption_records_warning_ids_and_the_next_run_is_clean"}]

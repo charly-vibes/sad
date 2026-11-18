@@ -1,0 +1,9 @@
+id = "severity-drift-is-grandfathered"
+description = "An adopted id that a classifier change promotes from warning to error stays suppressed and the run keeps passing."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_severity_change_to_an_adopted_id_stays_grandfathered"}, {flags = "fixing_a_warning_shrinks_the_baseline_on_re_adoption"}]

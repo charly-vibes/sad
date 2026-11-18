@@ -1,9 +1,9 @@
 id = "rust-file-with-one-node-per-class"
-description = "Each Rust comment node attributes to header, doc, marker, suppression, exemption, or prose."
+description = "Attribution assigns each Rust node to header, doc, marker, rationale, suppression, exemption, or prose."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "rust_one_node_per_class"}]
+cargo = [{flags = "rust_one_node_per_class"}, {flags = "rationale_tags_with_a_body_are_rationale"}, {flags = "rationale_comments_count_in_stats_without_a_prose_finding"}]

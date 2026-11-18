@@ -14,7 +14,7 @@
 > (change archived 2026-11-18). The decision record and evidence ledger are
 > [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md);
 > the triage design and its corpus evidence live in
-> `openspec/changes/comment-smell-triage/`. This page records the v2 model
+> `openspec/changes/archive/2026-11-18-comment-smell-triage/`. This page records the v2 model
 > plus the triage pass.
 
 ## Premise
@@ -348,7 +348,7 @@ resolution is file lookup only.
 - **Evidence-backed:** suppression debt and its envelope;
   unresolvable-marker detection; the summary-lead cap. The diagnosis
   behind the triage model is recorded in
-  `openspec/changes/comment-smell-triage/evidence.md`: 48
+  `openspec/changes/archive/2026-11-18-comment-smell-triage/evidence.md`: 48
   repositories, 3,873 files, 58,781 findings, of which 42.5% were in tests
   and 24.7% mechanical noise, while TODO comments were 0.03% and
   apology/workaround phrases 0.04%. The same corpus showed 39.6% of
@@ -367,7 +367,7 @@ resolution is file lookup only.
 
 The v1 ledger is in
 [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md);
-the triage evidence is `openspec/changes/comment-smell-triage/evidence.md`.
+the triage evidence is `openspec/changes/archive/2026-11-18-comment-smell-triage/evidence.md`.
 
 ## Resolved decisions
 

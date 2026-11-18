@@ -1,9 +1,9 @@
 id = "non-public-docstrings-are-capped-equally"
-description = "doc_summary_cap_exceeded is emitted for a private docstring; there is no visibility carve-out."
+description = "A private Python function's multi-sentence-lead docstring still emits doc_summary_cap_exceeded because there is no visibility carve-out."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
 cargo = [{flags = "private_python_docstring_is_capped_like_a_public_one"}]

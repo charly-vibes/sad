@@ -1,0 +1,9 @@
+id = "abbreviations-and-versions-do-not-split-sentences"
+description = "A summary lead reading Parse e.g. v0.1 manifests from Node.js counts as one sentence, so no doc finding is emitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "abbreviation_version_and_code_span_periods_do_not_split_sentences"}]

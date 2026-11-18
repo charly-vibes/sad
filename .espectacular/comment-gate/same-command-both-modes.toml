@@ -1,5 +1,5 @@
 id = "same-command-both-modes"
-description = "The identical sad check invocation produces the same envelope and exit code as pre-hook and in CI."
+description = "The identical invocation produces the same envelope and exit code as a pre-hook and in CI."
 archetype = "PF"
 status = "active"
 superseded_by = ""

@@ -1,0 +1,9 @@
+id = "narration-rule-is-mechanical"
+description = "Every member node of the run carries smell narration and severity error when the run restates the next statement or is sequencer-led."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_two_token_restatement_is_narration"}, {flags = "a_sequencer_naming_the_next_call_is_narration"}]

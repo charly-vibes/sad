@@ -1,0 +1,9 @@
+id = "marker-bearing-prose-is-not-a-prose-finding"
+description = "A TODO or apology comment carrying a resolvable marker is attributed as a marker, so no comment_outside_channel finding is emitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "a_leading_marker_owns_the_comment"}, {flags = "resolvable_marker_emits_no_findings"}]

@@ -1,0 +1,9 @@
+id = "rationale-tag-requires-a-body"
+description = "A SAFETY: tag with no body and a NOTE: comment stay finding-eligible prose instead of rationale."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "tagless_safety_and_note_remain_prose"}, {flags = "rationale_tags_with_a_body_are_rationale"}]

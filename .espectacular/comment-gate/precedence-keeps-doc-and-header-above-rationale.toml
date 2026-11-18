@@ -1,0 +1,9 @@
+id = "precedence-keeps-doc-and-header-above-rationale"
+description = "An inner-doc SAFETY: line stays header and a /// WHY: doc stays doc, so neither becomes rationale."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "header_doc_and_marker_outrank_rationale"}]

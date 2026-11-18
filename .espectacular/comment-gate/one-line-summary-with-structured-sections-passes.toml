@@ -1,9 +1,9 @@
 id = "one-line-summary-with-structured-sections-passes"
-description = "No doc finding is emitted for a one-line summary followed by structured sections."
+description = "A one-line summary followed by a blank doc line and structured sections produces no doc finding."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
 cargo = [{flags = "one_line_summary_with_a_structured_errors_section_passes"}, {flags = "rust_block_structured_doc_passes_the_summary_cap"}]
