@@ -33,6 +33,12 @@ Consequence: prose IDs are unchanged, but a dead-code finding hashes the block b
 A knob flip re-labels a single-node block under the same ID; for a multi-node block it replaces one
 dead-code finding with N prose findings — pick the knob state before adopting, or re-adopt.
 
+**Spec delta required.** The deployed requirement says every finding-eligible prose node emits a
+`comment_outside_channel` finding. This class keeps the node's `Prose` attribution but emits
+`commented_out_code` instead, and emits per block rather than per node. Implementing it therefore
+needs a spec delta in the comment-gate capability (new check + the emission exception), not just an
+implementation ticket; `sad-wfj` carries the design, and the delta must land before code.
+
 Header, doc, marker, suppression, `missing_header`, `unresolvable_marker`, suppression debt/cap, and
 `doc_summary_cap_exceeded` are untouched: doc nodes never enter this class, so no double fire. The
 new kind needs its own suppression id (targeting is still per-check plumbing); routed dead code
@@ -111,9 +117,10 @@ from the finding's path at emission, not emitted verbatim:
 - `description`: "Delete the commented-out code. If it is still needed, recover it from VCS history;
   never restore it as a comment."
 
-The landed `for_kind` returns literal `<path>` and no caller substitutes it, so the ticket must add
-that substitution (this kind, ideally all). Deletion is the default because the code was already
-decided against; history is the escape hatch for the revived minority (below), at zero cost in git.
+`<path>` is rendered by `remediation::for_kind(kind, path)` at emission, so the persisted command
+carries the finding's repo-relative anchor (see `sad/src/remediation.rs`). Deletion is the default
+because the code was already decided against; history is the escape hatch for the revived minority
+(below), at zero cost in git.
 ## Evidence status
 - **Prior art (checkable):** SonarQube rule S125, "Sections of code should not be commented out";
   SonarJS PR #6696 ("Fix FP in S125: skip documentation example comments flagged as dead code")
@@ -157,4 +164,4 @@ confirm the pretender-parity hash check if a baseline import is ever wanted; mem
 `(language, block-body-hash)`; envelope stats for dead-code line counts are deferred to a spec
 change; add `commented_out_code` to the suppression-ID set and `docs/src/gate-model.md`; decide
 whether to accept the plain-comment documentation false positive or add the prefix guard (an
-explicit exception to determinism); render `<path>` at emission for every kind.
+explicit exception to determinism); land the spec delta above before implementation.

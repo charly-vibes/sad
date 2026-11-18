@@ -107,9 +107,13 @@ spec-check:
 structure-check:
     pretender check --mode gate
 
+# Dogfood: sad gates its own tree against sad-baseline.json.
+self-gate:
+    cargo run -q --package sad -- check --all
+
 # Full CI gate: fmt + type-check + lint + tests + spec correspondence +
-# structural gate + spelling
-ci: fmt-check type-check lint test spec-check structure-check typos
+# structural gate + self-gate + spelling
+ci: fmt-check type-check lint test spec-check structure-check self-gate typos
 
 # Project-local preflight gate.
 # Prefer this over `bd preflight` for now; the current beads preflight is

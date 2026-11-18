@@ -20,8 +20,8 @@ milestone, not by cadence.
   remediation; `--adopt` baseline with shrink-only re-adoption;
   `sad.toml` configuration.
 - Self-hosted: the repository gates itself (`sad.toml`,
-  `sad-baseline.json`, pre-commit entry); 24 espectacular contracts map the
-  EARS scenarios to tests; `just ci` runs spec correspondence, the
-  pretender structural gate and spelling.
+  `sad-baseline.json`, `self-gate` recipe in `just ci`); 24 espectacular
+  contracts map the EARS scenarios to tests; `just ci` runs spec
+  correspondence, the pretender structural gate, the self-gate and spelling.
 - Measurement duty recorded in [docs/src/validation.md](docs/src/validation.md)
   (first published rates + falsification rule).
