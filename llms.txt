@@ -1,7 +1,7 @@
 # sad
 
 > Rust CLI for a deterministic documentation gate: comments and doc strings
-> outside three structural channels are findings, because prose is evidence
+> outside four structural channels are findings, because prose is evidence
 > the code failed to express itself.
 
 sad gates in-code prose. No network, no models, no randomness: same input
@@ -11,35 +11,44 @@ simpler, more expressive code, not more words.
 
 ## Channels
 
-Prose is legitimate in exactly three structurally checkable places:
+Prose is legitimate in exactly four structurally checkable places:
 
 - **File header** — a top-of-file block containing `Purpose`,
   `Responsibilities`, and `Rationale` (gated by `require_header`).
 - **Doc channel** — doc comments and docstrings; the summary lead (text up
-  to the first blank line) is capped at `doc_summary_cap` rendered lines,
+  to the first blank line) is capped at `doc_summary_cap` sentences,
   everything after the first blank line is uncapped.
 - **Traceability markers** — `marker_prefix` + an ID matching
   `marker_pattern` that resolves against `.beads/issues.jsonl` or
   `openspec/specs/`.
+- **Rationale** — a leading `SAFETY:`, `INVARIANT:`, `SECURITY:`, or
+  `WHY:` tag with a non-empty body, counted in `stats.comments_rationale`.
 
-Licence/SPDX headers, `@generated` regions, `exclude` globs, and every
-suppression directive (`# noqa`, `# type: ignore`, `// @ts-ignore`,
+Licence/SPDX headers and licence lines beside them, `@generated` regions,
+`exclude` globs, Python file metadata (a shebang on source line 1, a PEP
+263 coding cookie on lines 1–2), and every suppression directive (`# noqa`,
+`# type: ignore`, `// @ts-ignore`, `// @ts-expect-error`,
 `// eslint-disable-*`, `sad:ignore <check-id> <reason>`) are
 exempt-but-counted: the envelope reports header/doc counts, markers
-resolved, exemptions, and suppression debt.
+resolved, rationale count, exemptions, and suppression debt.
 
 ## Checks
 
 - `comment_outside_channel` — prose attributed to no channel
+- `commented_out_code` — prose block whose normalised body is code-shaped
 - `doc_summary_cap_exceeded` — doc summary lead over the cap
 - `unresolvable_marker` — marker-prefixed ID that resolves to nothing
 - `missing_header` — first block lacks a required header keyword
 - `suppression_cap_exceeded` — file over `suppression_cap` suppressions
 
+Each finding carries `severity`. Errors block: narration, apology, todo,
+`commented_out_code`, and the structural findings. Warnings report: banner,
+unclassified, and the doc cap.
+
 ## Commands
 
-- `sad check` — gate the default attribution scope; exits 0 on pass, 1 on
-  findings or gate failure
+- `sad check` — gate the default attribution scope; exits 0 on pass, 1
+  when blocking findings exist
 - `sad check --all` — analyze every non-excluded file
 - `sad check --adopt` — write and commit `sad-baseline.json` (shrink-only
   baseline of grandfathered finding IDs, then evaluate against it)

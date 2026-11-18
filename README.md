@@ -57,7 +57,7 @@ cargo install --path sad --locked
 just install
 ```
 
-The [gate model](docs/src/gate-model.md) — three legitimate prose channels,
+The [gate model](docs/src/gate-model.md) — four legitimate prose channels,
 six checks, pretender-mirror output contract — is implemented and
 dogfooded in this repository (pre-release).
 

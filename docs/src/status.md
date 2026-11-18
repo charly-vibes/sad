@@ -8,11 +8,11 @@
 # Status
 
 **v0.1 gate implemented** — the comment gate runs: tree-sitter frontends
-for Rust, Python and TypeScript; six checks
-(`comment_outside_channel`, `commented_out_code`,
+for Rust, Python (including `.pyi` stubs), TypeScript and JavaScript;
+six checks (`comment_outside_channel`, `commented_out_code`,
 `doc_summary_cap_exceeded`, `unresolvable_marker`, `missing_header`,
-`suppression_cap_exceeded`) plus
-`suppression_debt`; agent-attribution scoping; genesis `check` envelope;
+`suppression_cap_exceeded`) plus `suppression_debt`; agent-attribution
+scoping; genesis `check` envelope;
 `--adopt` baseline with shrink-only re-adoption. The repository dogfoods it
 (`sad.toml`, `sad-baseline.json`); `just ci` runs the gate through its
 `self-gate` recipe (`cargo run -q --package sad -- check --all`), not as a

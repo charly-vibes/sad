@@ -1,21 +1,22 @@
 # sad
 
 > Documentation gate for code: comments and doc strings are treated as
-> evidence the code failed to express itself, so prose outside three
+> evidence the code failed to express itself, so prose outside four
 > structural channels becomes a finding.
 
 sad is a Rust CLI that runs `sad check` over a source tree and emits a
-genesis suite envelope of findings. It parses Rust, Python, and TypeScript
-with pinned tree-sitter grammars and attributes every comment or doc-string
-node structurally — node kind, position, leading token — never semantically.
-Exit status mirrors the envelope's `ok`: 0 on pass, 1 on findings or gate
-failure.
+genesis suite envelope of findings. It parses Rust, Python (including
+`.pyi` stubs), TypeScript, and JavaScript with pinned tree-sitter grammars
+over the gated extensions `.rs`, `.py`, `.pyi`, `.ts`, `.js`, and `.mjs`,
+and attributes every comment or doc-string node structurally — node kind,
+position, leading token — never semantically. Exit status mirrors the
+envelope's `ok`: 0 on pass, 1 when error-severity findings block.
 
 ## Key commands
 
 - `sad check` — gate the default attribution scope (files whose governing
   revision carries the configured attribution trailer, plus new/untracked
-  files); non-zero exit on findings
+  files); non-zero exit when error-severity findings block
 - `sad check --all` — analyze every non-excluded file (required for CI and
   for adopting the gate on an existing tree)
 - `sad check --adopt` — write `sad-baseline.json` of grandfathered finding
@@ -31,25 +32,36 @@ Flags accepted by `check`: `--json` (raw envelope), `--all`, `--adopt`,
 | Check | Finding |
 |---|---|
 | `comment_outside_channel` | prose attributed to no channel |
+| `commented_out_code` | prose block whose normalised body is code-shaped |
 | `doc_summary_cap_exceeded` | doc summary lead over the configured cap |
 | `unresolvable_marker` | marker-prefixed ID that resolves to nothing |
 | `missing_header` | first block lacks a required header keyword, when enabled |
 | `suppression_cap_exceeded` | file over its suppression cap |
 
-Finding IDs are stable — `<path>::<symbol-path>::<content-hash>` — so they
-survive line drift and unrelated edits. File-scoped findings use `-` as the
-symbol-path component.
+Errors block: narration, apology, todo, `commented_out_code`, and the
+structural findings. Warnings report: banner, unclassified, and the doc
+cap. Finding IDs are stable — `<path>::<symbol-path>::<content-hash>` — so
+they survive line drift and unrelated edits. File-scoped findings use `-`
+as the symbol-path component.
 
 ## Channels and exemptions
 
-Legitimate prose lives in exactly three places: the file header (must
+Legitimate prose lives in exactly four places: the file header (must
 contain `Purpose`, `Responsibilities`, and `Rationale` when
 `require_header` is on), the doc channel (summary lead capped, structured
-sections after the first blank line uncapped), and traceability markers
+sections after the first blank line uncapped), traceability markers
 (`marker_prefix` + `marker_pattern`, resolvable against
-`.beads/issues.jsonl` or `openspec/specs/`). Licence/SPDX headers,
-`@generated` regions, and `exclude` globs produce no findings. Suppressions
-are exempt but counted as `suppression_debt` in the envelope.
+`.beads/issues.jsonl` or `openspec/specs/`), and rationale (a leading
+`SAFETY:`, `INVARIANT:`, `SECURITY:`, or `WHY:` tag with a non-empty
+body). Licence/SPDX headers produce no findings, and nor do licence
+lines beside the tag that open with `Copyright` plus a year, `(c)`, or
+`©`, a leading `©` or `(c)`, `Licensed under`, `License:`, or
+`All rights reserved`. `@generated` regions, `exclude` globs, and Python
+file metadata (a shebang on source line 1, a PEP 263 coding cookie on
+lines 1–2) are likewise exempt. Suppressions (`# noqa`,
+`# type: ignore`, `// @ts-ignore`, `// @ts-expect-error`,
+`// eslint-disable-*`, `sad:ignore <check-id> <reason>`) are exempt but
+counted as `suppression_debt` in the envelope.
 
 ## Configuration
 

@@ -10,9 +10,9 @@ milestone, not by cadence.
   `narration`, `apology`, `todo`, `banner`, `commented_out_code`,
   `doc_cap`, `unclassified` — or is `null` for structural findings
   (`missing_header`, `unresolvable_marker`,
-  `suppression_cap_exceeded`). Errors: narration, apology, todo, and the
-  structural findings. Warnings: banner, unclassified, doc cap, and
-  `commented_out_code` until `sad-jdw` restores its precision.
+  `suppression_cap_exceeded`). Errors: narration, apology, todo,
+  `commented_out_code`, and the structural findings. Warnings: banner,
+  unclassified, and doc cap.
 - Smell classifier: one deterministic post-pass over each maximal
   adjacent prose run, so a multi-line comment is judged as a unit while
   every member node keeps its own stable ID. Rules cover TODO/FIXME/XXX
@@ -44,6 +44,36 @@ milestone, not by cadence.
   warning to error stays grandfathered until re-adoption.
   `doc_summary_cap` keeps its key and default (`1`), now read as
   sentences; see [docs/src/gate-model.md](docs/src/gate-model.md).
+- **Python file metadata is exempt** (`sad-h3i`): a `#!` shebang on
+  source line 1 and a PEP 263 coding cookie (`-*- coding: utf-8 -*-`,
+  `coding: utf-8`, `coding=utf-8`) on source lines 1–2 attribute to the
+  exemption class and are counted by the exemption summary instead of
+  firing `comment_outside_channel`; the same text on a later line stays
+  finding-eligible prose.
+- **`@ts-expect-error` is suppression debt** (`sad-nw1`): the directive
+  joins the recognised suppression forms as `ts_expect_error`, unscoped
+  like `@ts-ignore`, so it is counted in `suppression_debt` and never a
+  prose finding.
+- **Licence lines beside SPDX are exempt** (`sad-6z5`): a comment body
+  opening with `Copyright` plus a four-digit year, `(c)`, or `©`; a
+  leading `©` or `(c)`; `Licensed under`; `License:`; or
+  `All rights reserved` joins the licence header block. Prose that merely
+  names a copyright or a licence stays a finding.
+- **Skipped source directories are visible** (`sad-xkz`): the skip list
+  grows to 21 names (adding `vendor`, `third_party`, `.mypy_cache`,
+  `.ruff_cache`, `out`, `.turbo`, `.svelte-kit`), and a nested `target`,
+  `build`, `dist`, `book`, or `out` directory at depth two or deeper emits
+  one `skipped_source_directory` warning naming the path. A root-level
+  build tree stays silent, and warnings never change the exit status.
+- **`.pyi` stubs are gated** (`sad-7hx`): the supported extension set is
+  `.rs`, `.py`, `.pyi`, `.ts`, `.js`, and `.mjs`; stubs are parsed as
+  Python with the existing doc channel and no stub-specific rule.
+- **`commented_out_code` precision restored** (`sad-jdw`): a matched
+  non-banner block is an `error` again. A body with no alphanumeric
+  character never enters the class, the parse root must carry a
+  declaration or control statement, and call, assignment, new-expression,
+  formula, and annotation roots stay prose; a separator block reclassified
+  as a banner stays a warning.
 
 ## v0.1.0 — unreleased
 

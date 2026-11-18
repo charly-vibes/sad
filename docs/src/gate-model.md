@@ -81,7 +81,11 @@ marker > rationale > suppression > exemption > prose**. So `//! SAFETY:`
 is a header, `/// WHY:` is doc, and `// see <id> SAFETY: ...` is a marker;
 only a plain comment that falls through the earlier classes can be
 rationale, and only a comment that falls through every class is
-finding-eligible prose.
+finding-eligible prose. The exemption class includes Python file metadata:
+a `#!` shebang on source line 1 and a PEP 263 coding cookie
+(`-*- coding: utf-8 -*-`, `coding: utf-8`, `coding=utf-8`) on source lines
+1–2 are exempt-but-observable, counted by the exemption summary and never
+prose; the same text on a later line stays finding-eligible prose.
 
 **Exempt-but-observable principle:** every exempt channel's numbers —
 header count, doc count, markers resolved, rationale count, exemptions,
@@ -90,18 +94,28 @@ exempt channel without the numbers moving.
 
 ## Exemptions
 
-Licence/SPDX header blocks, `@generated` marker regions, and paths matching
-`exclude` globs produce no findings. The envelope reports exemption counts,
-plus the exempt regions a run skipped, so exemptions are as observable as
-the channels.
+Licence/SPDX header blocks, `@generated` marker regions, paths matching
+`exclude` globs, and Python file metadata produce no findings. Licence text
+beside an SPDX tag belongs to the licence block when the body opens with a
+bounded marker: `Copyright` followed by a four-digit year, `(c)`, or `©`; a
+leading `©` or `(c)`; `Licensed under`; `License:`; or
+`All rights reserved`. The bound is the marker shape, so prose that merely
+names copyright or a licence — `Copyright is a legal concept`,
+`License negotiation happens elsewhere` — stays finding-eligible. Python
+file metadata is bounded by position: a shebang only on source line 1, a
+coding cookie only on lines 1–2, and the same text later stays prose. The
+envelope reports exemption counts, plus the exempt regions a run skipped,
+so exemptions are as observable as the channels.
 
 ## Suppression
 
 Every suppression directive — `# noqa`, `# type: ignore`, `// @ts-ignore`,
-`// eslint-disable-*`, and sad's own `sad:ignore <check-id> <reason>` — is
-exempt-but-counted: never a prose finding, always a `suppression_debt`
-entry (file, line, directive, check) in the envelope. A directive scopes
-to exactly one check. When `suppression_cap` is set (see
+`// @ts-expect-error`, `// eslint-disable-*`, and sad's own
+`sad:ignore <check-id> <reason>` — is exempt-but-counted: never a prose
+finding, always a `suppression_debt` entry (file, line, directive, check)
+in the envelope. A directive scopes to a single check and withholds no
+other finding; the two `@ts-*` forms are unscoped and serialise as
+`ts_ignore` and `ts_expect_error`. When `suppression_cap` is set (see
 [Configuration](#configuration-sadtoml)), a file whose debt exceeds it
 emits `suppression_cap_exceeded`, so the gate cannot be routed by
 ignore-spam with zero signal.
@@ -111,7 +125,7 @@ ignore-spam with zero signal.
 | Check | Finding |
 |---|---|
 | `comment_outside_channel` | prose attributed to no channel |
-| `commented_out_code` | prose block whose normalised body parses as code |
+| `commented_out_code` | prose block whose normalised body is code-shaped |
 | `doc_summary_cap_exceeded` | doc summary lead over `doc_summary_cap` sentences |
 | `unresolvable_marker` | marker-prefixed ID that resolves to nothing |
 | `missing_header` | first block does not contain all three header keywords, when `require_header` is on |
@@ -131,7 +145,7 @@ with both fields always present.
 |---|---|---|
 | `comment_outside_channel` (narration, apology, todo) | that smell | `error` |
 | `comment_outside_channel` (banner, unclassified) | that smell | `warning` |
-| `commented_out_code` | `commented_out_code` | `warning` until `sad-jdw` lands precision, then `error` |
+| `commented_out_code` | `commented_out_code` | `error` |
 | `doc_summary_cap_exceeded` | `doc_cap` | `warning` |
 | `missing_header` | `null` | `error` |
 | `unresolvable_marker` | `null` | `error` |
@@ -181,18 +195,24 @@ in a fixed order (line endings and BOM, per-kind marker and gutter
 stripping, the newline join, common-prefix dedent, trailing-whitespace
 and blank-end trim) and hashed as `path::symbol-path::content-hash`
 with the anchor at the run's first node. One block is one finding,
-carrying `smell: commented_out_code` and warning severity until `sad-jdw`
-restores precision; a separator-only body is classified `banner` even
-when the block check matched it.
+carrying `smell: commented_out_code` and error severity; a block
+reclassified as `banner` stays a warning.
 
 The predicate parses the normalised body with the same pinned frontend
-that attributed the nodes: a clean tree, non-empty root children, every
-root child in the language's closed root-allow table, at least one shape
-node, and no root-deny child, with root deny outranking shape. The
-tables are transcribed against tree-sitter-rust 0.24,
-tree-sitter-python 0.25, and tree-sitter-typescript 0.23; unknown kinds
-fail closed to prose, so a grammar bump has one audit point. A predicate
-miss or `[checks] commented_out_code = false` leaves the per-node
+that attributed the nodes, and a body qualifies only on a clean tree whose
+root children are non-empty, every root child is in the language's closed
+root-allow table, no root-deny child is present, and at least one root
+child is a declaration or a control statement from the closed
+per-language code-shape table; root deny outranks shape. A body with no
+alphanumeric character is rejected before the parser, so a ruler or
+divider never reaches the class. A root made only of bare
+expression-statement payloads — a call, an assignment, a new-expression, a
+formula, an annotation, `// e.g. g();` — carries no declaration or control
+child and stays prose. The tables are transcribed against
+tree-sitter-rust 0.24, tree-sitter-python 0.25, and
+tree-sitter-typescript 0.23; unknown kinds fail closed to prose, so a
+grammar bump has one audit point. A predicate miss or
+`[checks] commented_out_code = false` leaves the per-node
 `comment_outside_channel` findings untouched — the class never buys
 silence by guessing. A directive scoped to `commented_out_code` is
 ordinary suppression debt and does not join a block.
@@ -207,9 +227,9 @@ prose.
 
 Remediation is hardcoded: `git log -p --follow <path>` with "Delete the
 commented-out code. If it is still needed, recover it from VCS history;
-never restore it as a comment." Known false positive: a plain-comment
-call example such as `// e.g. g();` parses as a call and fires; only doc
-channels are excluded.
+never restore it as a comment." Call-shaped examples such as
+`// e.g. g();` stay prose under the code-shape rule, and doc channels are
+excluded before the predicate runs.
 
 ## Scope
 
@@ -313,8 +333,10 @@ agent's job; sad refuses prose as a substitute.
 Rust, Python, TypeScript, and JavaScript — v1 scope, tree-sitter
 comment-node extraction with channel attribution, grammar pins inherited
 from pretender's known-good set. The gated extension set is exactly
-`.rs`, `.py`, `.ts`, `.js`, and `.mjs`; JavaScript files are parsed with
-the TypeScript frontend. Adjacent extensions the gate cannot parse
+`.rs`, `.py`, `.pyi`, `.ts`, `.js`, and `.mjs`; `.pyi` stubs are parsed as
+Python with the unchanged doc channel (module, class, and function
+docstrings) and no stub-specific rule, and JavaScript files are parsed
+with the TypeScript frontend. Adjacent extensions the gate cannot parse
 (`.tsx`, `.mts`, `.cts`, `.jsx`) are counted in `files_unsupported` and
 named by one `unsupported_extension` envelope warning each, never dropped
 silently; JSX/TSX parsing is a separate decision. Rust ships first so sad
@@ -328,6 +350,21 @@ for anything else). The gate never guesses an encoding and invents no
 findings for skipped content; the warnings keep the skip visible but do
 not by themselves fail the run. Text mode appends the same paths and
 reasons, so a passing line never hides a source it did not judge.
+
+### Skipped directories
+
+Discovery never traverses 21 directory names: `.git`, `.beads`,
+`node_modules`, `vendor`, `third_party`, `.venv`, `venv`, `.tox`,
+`.mypy_cache`, `.ruff_cache`, `.pytest_cache`, `__pycache__`, `target`,
+`dist`, `build`, `out`, `coverage`, `.next`, `.turbo`, `.svelte-kit`, and
+`book`. The names are reserved for build, vendor, and cache trees and
+match at any depth. Five are also plausible source-directory names —
+`target`, `build`, `dist`, `book`, `out` — so a nested occurrence at depth
+two or deeper produces one `skipped_source_directory` envelope warning
+naming the directory (`src/target/`), while a root-level build tree stays
+silent. Files inside a skipped directory yield no findings and are never
+enumerated; text mode names each skipped directory, and the warnings never
+change the exit status.
 
 ## Boundary
 
@@ -362,8 +399,9 @@ resolution is file lookup only.
   minority signal.
 - **Bets:** the header requirement (zero corpus support; presence mandates
   tend toward stub noise), the premise that banning prose improves code
-  (correlational only), and that warning severity plus `--strict` keeps
-  the gate honest while the heuristics mature.
+  (correlational only), and that the two-tier verdict — warnings report,
+  errors block, `--strict` restores the single tier — keeps the gate honest
+  while the heuristics mature.
 
 The v1 ledger is in
 [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md);
