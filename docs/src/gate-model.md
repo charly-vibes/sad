@@ -366,6 +366,35 @@ silent. Files inside a skipped directory yield no findings and are never
 enumerated; text mode names each skipped directory, and the warnings never
 change the exit status.
 
+### Ignore files
+
+When the repository root holds a `.git` entry — a directory, or a file for
+a linked worktree or submodule — discovery honors `.gitignore` files. The
+`.git` contents are never read, and there is no upward search from the root
+given to discovery. Only ignore files on directories the walk reaches are
+read; a deeper file overrides a shallower one, and the last matching rule
+in a file wins. The grammar is closed: a pattern without `/` matches a
+basename at any depth, a leading or embedded `/` anchors it at the ignore
+file's directory, a trailing `/` makes it directory-only, `!` negates,
+`*` and `?` match within one segment, `**` is a whole segment (a trailing
+`/**` covers descendants only), and character classes, braces, and
+backslashes stay literal, while CRLF endings and leading or trailing
+blanks are trimmed. An ignored directory is pruned, so a negation
+cannot re-include a path below it, and extension selection — `.pyi`
+included — runs after that pruning. Failures are total, never fatal: a
+missing, unreadable, or non-UTF-8 ignore file contributes no rules.
+
+Ignore files are tree content, so the file list stays a pure function of
+tree bytes plus repo-relative path, while a branch switch or `git clean`
+that edits a `.gitignore` can change the verdict. Tracked status is not
+consulted: a path matching a rule is skipped even if it was committed with
+`git add -f`, and user, global, and `.git/info/exclude` sources are never
+read. `git check-ignore -v <path>` explains any skip. Ignored paths are out
+of scope before analysis and add no counter, warning, or exemption count —
+unlike an exemption applied to a file that was analyzed. Re-inclusion is a
+tree edit (narrow the rule, add a `!` rule deeper, or move the file);
+`sad.toml` only narrows further.
+
 ## Boundary
 
 [pretender](https://github.com/charly-vibes/pretender) gates structure

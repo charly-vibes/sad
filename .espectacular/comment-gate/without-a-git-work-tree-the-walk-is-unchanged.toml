@@ -1,0 +1,9 @@
+id = "without-a-git-work-tree-the-walk-is-unchanged"
+description = "A .gitignore in a tree with no .git entry contributes no rules, so a matching source still yields its finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "no_git_work_tree_ignores_no_ignore_file"}]

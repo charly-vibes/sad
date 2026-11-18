@@ -65,6 +65,15 @@ milestone, not by cadence.
   `build`, `dist`, `book`, or `out` directory at depth two or deeper emits
   one `skipped_source_directory` warning naming the path. A root-level
   build tree stays silent, and warnings never change the exit status.
+- **Gitignored sources are out of scope** (`sad-z6q`): inside a git work
+  tree, discovery honors root and nested `.gitignore` files with no
+  configuration — no git binary, no index, no user or global excludes.
+  Matching supports `!` negation, `/` anchoring, trailing-`/`
+  directory-only rules, and `**`; an ignored directory is pruned, so a
+  negation cannot re-include below it. Ignored paths add no counter and no
+  warning; extension selection runs after ignore pruning. The file list
+  stays a pure function of tree bytes plus path, so a branch switch that
+  changes `.gitignore` content can change which sources are gated.
 - **`.pyi` stubs are gated** (`sad-7hx`): the supported extension set is
   `.rs`, `.py`, `.pyi`, `.ts`, `.js`, and `.mjs`; stubs are parsed as
   Python with the existing doc channel and no stub-specific rule.

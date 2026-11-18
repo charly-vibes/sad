@@ -1,0 +1,9 @@
+id = "gitignored-sources-are-not-gated"
+description = "A root .gitignore covering src/generated/ keeps src/generated/api.ts out of discovery and out of the findings for a git work tree."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "gitignored_sources_are_not_gated"}]

@@ -1,0 +1,9 @@
+id = "a-nested-ignore-file-overrides-the-root"
+description = "A src/.gitignore negation overrides the root ignore rule for src/keep.ts while a .ts file outside src/ stays omitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "nested_ignore_file_overrides_root"}]

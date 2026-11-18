@@ -1,0 +1,9 @@
+id = "a-directory-only-rule-leaves-a-same-named-file-gated"
+description = "A trailing-slash rule prunes the directory's contents while a regular file of the same name stays discovered and gated."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "directory_only_rule_leaves_same_named_file"}]

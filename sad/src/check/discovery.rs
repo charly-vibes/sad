@@ -2,8 +2,9 @@
 //! Responsibilities: map supported extensions, collect the adjacent
 //! extensions the gate cannot parse instead of dropping them silently, skip
 //! VCS metadata, dependency installs, caches, and build output, name the
-//! skipped directories whose name a source directory may legitimately use, and
-//! render repo-relative forward-slashed paths in sorted order.
+//! skipped directories whose name a source directory may legitimately use,
+//! honor root and nested `.gitignore` files inside a git work tree, and render
+//! repo-relative forward-slashed paths in sorted order.
 //! Rationale: discovery must be a pure tree walk — no clock, network, or
 //! parallelism — so the same tree always yields the same file list, and
 //! unreadable directories are skipped deterministically. Untracked files are
@@ -13,11 +14,18 @@
 //! dropped, so the language boundary is reported instead of silent. A nested
 //! skip-list name is ambiguous — `src/target/` can be hand-written source — so
 //! those directories are recorded by path, which reports the gap without
-//! enumerating the tree the walk just refused. Every result list is sorted and
-//! repo-relative so warnings are reproducible.
+//! enumerating the tree the walk just refused. Ignore files are tree content
+//! too, so honoring them only inside a `.git`-bearing work tree keeps the walk
+//! pure while letting authors declare generated and vendored sources out of
+//! scope; ignored entries are invisible exactly like skip-list directories, and
+//! a tree without `.git` walks as before. Results stay sorted and repo-relative.
 
 use std::fs;
 use std::path::Path;
+
+use self::gitignore::IgnoreStack;
+
+mod gitignore;
 
 /// Extensions the gate understands (matching [`crate::extract::language_for_path`]).
 const SOURCE_EXTENSIONS: [&str; 6] = ["rs", "py", "pyi", "ts", "js", "mjs"];
@@ -86,14 +94,15 @@ pub(super) struct Discovery {
 /// and sorted. Unreadable directories and symlinks are skipped.
 pub(super) fn discover_files(repo: &Path) -> Discovery {
     let mut discovery = Discovery::default();
-    walk(repo, repo, &mut discovery);
+    let mut ignores = IgnoreStack::detect(repo);
+    walk(repo, repo, &mut discovery, &mut ignores);
     discovery.files.sort();
     discovery.unsupported.sort();
     discovery.skipped.sort();
     discovery
 }
 
-fn walk(root: &Path, dir: &Path, discovery: &mut Discovery) {
+fn walk(root: &Path, dir: &Path, discovery: &mut Discovery, ignores: &mut Option<IgnoreStack>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -102,28 +111,67 @@ fn walk(root: &Path, dir: &Path, discovery: &mut Discovery) {
             continue;
         };
         let name = entry.file_name().to_string_lossy().into_owned();
+        let path = entry.path();
         if file_type.is_dir() {
-            if SKIPPED_DIRECTORIES.contains(&name.as_str()) {
-                record_skipped_directory(root, &entry.path(), &name, discovery);
-                continue;
-            }
-            walk(root, &entry.path(), discovery);
-            continue;
+            walk_directory(root, &path, &name, discovery, ignores);
+        } else if file_type.is_file() {
+            walk_file(root, &path, discovery, ignores);
         }
-        if !file_type.is_file() {
-            // Symlinks are neither files nor directories here: following them
-            // could loop, so the walk stays inside the real tree.
-            continue;
-        }
-        let Some((supported, rendered)) = entry_kind(root, &entry.path()) else {
-            continue;
-        };
-        if supported {
-            discovery.files.push(rendered);
-        } else {
-            discovery.unsupported.push(rendered);
-        }
+        // Symlinks are neither files nor directories here: following them
+        // could loop, so the walk stays inside the real tree.
     }
+}
+
+/// One directory entry: skip-list, ignore prune, then descend with its frame.
+fn walk_directory(
+    root: &Path,
+    path: &Path,
+    name: &str,
+    discovery: &mut Discovery,
+    ignores: &mut Option<IgnoreStack>,
+) {
+    if SKIPPED_DIRECTORIES.contains(&name) {
+        record_skipped_directory(root, path, name, discovery);
+        return;
+    }
+    if is_ignored(ignores, root, path, true) {
+        // WHY: pruned directories cannot be re-included from below, as in git.
+        return;
+    }
+    if let Some(stack) = ignores.as_mut() {
+        stack.enter(path);
+    }
+    walk(root, path, discovery, ignores);
+    if let Some(stack) = ignores.as_mut() {
+        stack.leave();
+    }
+}
+
+/// One file entry: dropped when ignored, then sorted by supported extension.
+fn walk_file(
+    root: &Path,
+    path: &Path,
+    discovery: &mut Discovery,
+    ignores: &mut Option<IgnoreStack>,
+) {
+    if is_ignored(ignores, root, path, false) {
+        return;
+    }
+    let Some((supported, rendered)) = entry_kind(root, path) else {
+        return;
+    };
+    if supported {
+        discovery.files.push(rendered);
+    } else {
+        discovery.unsupported.push(rendered);
+    }
+}
+
+/// Whether the ignore stack excludes this entry; no stack means no filtering.
+fn is_ignored(ignores: &Option<IgnoreStack>, root: &Path, path: &Path, is_dir: bool) -> bool {
+    ignores
+        .as_ref()
+        .is_some_and(|stack| stack.is_ignored(root, path, is_dir))
 }
 
 fn entry_kind(root: &Path, path: &Path) -> Option<(bool, String)> {
@@ -286,5 +334,67 @@ mod tests {
             vec!["src/legacy.jsx".to_string(), "src/view.tsx".to_string()]
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ignored_directory_cannot_be_reincluded_from_below() {
+        let root = temp_root("sad-check-prune");
+        fs::create_dir_all(root.join(".git")).expect("work-tree marker is created");
+        generated_tree(&root, "generated/\n");
+        fs::write(root.join("generated/.gitignore"), "!*\n").expect("nested rules are written");
+        assert!(
+            discover_files(&root).files.is_empty(),
+            "a pruned directory cannot be re-included from below"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn linked_worktree_marker_file_enables_filtering() {
+        let root = temp_root("sad-check-worktree");
+        generated_tree(&root, "generated/\n");
+        fs::write(root.join(".git"), "gitdir: /elsewhere\n").expect("marker is written");
+        assert!(
+            discover_files(&root).files.is_empty(),
+            "a `.git` file (linked worktree) enables filtering"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn broken_root_ignore_file_degrades_to_the_plain_walk() {
+        let root = temp_root("sad-check-broken");
+        fs::create_dir_all(root.join(".git")).expect("work-tree marker is created");
+        generated_tree(&root, "generated/\n");
+        fs::write(root.join(".gitignore"), [0xff, 0xfe, b'\n']).expect("rules are written");
+        assert_eq!(
+            discover_files(&root).files,
+            vec!["generated/api.rs".to_string()],
+            "an unreadable root ignore file disables filtering entirely"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn ignore_files_outside_a_work_tree_are_not_read() {
+        let root = temp_root("sad-check-nogit");
+        generated_tree(&root, "generated/\n");
+        assert_eq!(
+            discover_files(&root).files,
+            ["generated/api.rs".to_string()]
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    fn temp_root(tag: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        root
+    }
+
+    fn generated_tree(root: &Path, ignore: &str) {
+        fs::create_dir_all(root.join("generated")).expect("fixture tree is created");
+        fs::write(root.join(".gitignore"), ignore).expect("root rules are written");
+        fs::write(root.join("generated/api.rs"), "fn api() {}").expect("fixture is written");
     }
 }

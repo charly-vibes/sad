@@ -1,0 +1,9 @@
+id = "negation-re-includes-a-specific-entry"
+description = "A ! re-include after a file-level ignore rule brings one specific entry back into the discovered set."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "negated_ignore_rule_reincludes_entry"}]
