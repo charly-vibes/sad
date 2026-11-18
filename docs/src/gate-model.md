@@ -7,8 +7,9 @@
 
 # Gate Model
 
-> **Status: specified 2026-11-17 (design resolved 2026-11-16) —
-> implementation under tickets; not yet shipped.** The EARS spec deploys to
+> **Status: specified 2026-11-17 (design resolved 2026-11-16); v0.1
+> implemented and dogfooded in this repository — pre-release, not yet on
+> crates.io.** The EARS spec deploys to
 > [`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
 > on archive; until then it lives
 > [in the change directory](https://github.com/charly-vibes/sad/blob/main/openspec/changes/specify-gate-objective/specs/comment-gate/spec.md),

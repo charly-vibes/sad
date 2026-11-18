@@ -38,7 +38,7 @@ sad --version
 
 ```bash
 sad version [--json]   # tool identity as a genesis suite envelope
-sad check [--json] [--all] [--adopt] [--config <path>]   # gate run (skeleton)
+sad check [--json] [--all] [--adopt] [--config <path>]   # documentation gate
 ```
 
 Every command emits the suite JSON envelope — key fields `ok`, `data`,
@@ -50,7 +50,7 @@ envelope. Exit status mirrors `ok` — a failed gate is never process success.
 
 The gate surface is specified in [Gate Model](gate-model.md).
 
-### Adopting the gate (once shipped)
+### Adopting the gate
 
 On an existing tree, adopt with the full scope:
 

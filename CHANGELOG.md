@@ -9,5 +9,19 @@ milestone, not by cadence.
   family gates wiring (just/testaruda TDD loop, lefthook pre-commit gates,
   mdBook docs, CI).
 - Gate model specified (2026-11-16 grill-me interview) —
-  [docs/src/gate-model.md](docs/src/gate-model.md); implementation pending
-  (sad-lcy).
+  [docs/src/gate-model.md](docs/src/gate-model.md).
+- Comment gate implemented (EARS change `specify-gate-objective`):
+  tree-sitter frontends for Rust, Python and TypeScript; channel attribution
+  (header / doc / marker / suppression / exemption / prose); checks
+  `comment_outside_channel`, `doc_summary_cap_exceeded`,
+  `unresolvable_marker`, `missing_header`, `suppression_cap_exceeded`;
+  suppression debt and exemption counts in the genesis `check` envelope;
+  `Assisted-by`-scoped default mode with `--all`; hardcoded per-kind
+  remediation; `--adopt` baseline with shrink-only re-adoption;
+  `sad.toml` configuration.
+- Self-hosted: the repository gates itself (`sad.toml`,
+  `sad-baseline.json`, pre-commit entry); 24 espectacular contracts map the
+  EARS scenarios to tests; `just ci` runs spec correspondence, the
+  pretender structural gate and spelling.
+- Measurement duty recorded in [docs/src/validation.md](docs/src/validation.md)
+  (first published rates + falsification rule).
