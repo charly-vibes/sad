@@ -1,0 +1,103 @@
+# sad
+
+> Documentation gate for code: comments and doc strings are treated as
+> evidence the code failed to express itself, so prose outside three
+> structural channels becomes a finding.
+
+sad is a Rust CLI that runs `sad check` over a source tree and emits a
+genesis suite envelope of findings. It parses Rust, Python, and TypeScript
+with pinned tree-sitter grammars and attributes every comment or doc-string
+node structurally — node kind, position, leading token — never semantically.
+Exit status mirrors the envelope's `ok`: 0 on pass, 1 on findings or gate
+failure.
+
+## Key commands
+
+- `sad check` — gate the default attribution scope (files whose governing
+  revision carries the configured attribution trailer, plus new/untracked
+  files); non-zero exit on findings
+- `sad check --all` — analyze every non-excluded file (required for CI and
+  for adopting the gate on an existing tree)
+- `sad check --adopt` — write `sad-baseline.json` of grandfathered finding
+  IDs, commit it, evaluate against it; the baseline is shrink-only, so
+  growing it fails the run
+- `sad version [--json]` — tool identity as a genesis suite envelope
+
+Flags accepted by `check`: `--json` (raw envelope), `--all`, `--adopt`,
+`--config <path>`.
+
+## Checks
+
+| Check | Finding |
+|---|---|
+| `comment_outside_channel` | prose attributed to no channel |
+| `doc_summary_cap_exceeded` | doc summary lead over the configured cap |
+| `unresolvable_marker` | marker-prefixed ID that resolves to nothing |
+| `missing_header` | first block lacks a required header keyword, when enabled |
+| `suppression_cap_exceeded` | file over its suppression cap |
+
+Finding IDs are stable — `<path>::<symbol-path>::<content-hash>` — so they
+survive line drift and unrelated edits. File-scoped findings use `-` as the
+symbol-path component.
+
+## Channels and exemptions
+
+Legitimate prose lives in exactly three places: the file header (must
+contain `Purpose`, `Responsibilities`, and `Rationale` when
+`require_header` is on), the doc channel (summary lead capped, structured
+sections after the first blank line uncapped), and traceability markers
+(`marker_prefix` + `marker_pattern`, resolvable against
+`.beads/issues.jsonl` or `openspec/specs/`). Licence/SPDX headers,
+`@generated` regions, and `exclude` globs produce no findings. Suppressions
+are exempt but counted as `suppression_debt` in the envelope.
+
+## Configuration
+
+`sad.toml` at the repository root, discovered after `--config <path>`.
+Knobs: `checks`, `doc_summary_cap`, `marker_prefix`, `marker_pattern`,
+`resolvers`, `require_header`, `suppression_cap`, `exclude`,
+`attribution.trailer`.
+
+## Documentation
+
+- [Getting started](docs/src/getting-started.md)
+- [Gate model](docs/src/gate-model.md)
+- [Validation](docs/src/validation.md)
+- [Status](docs/src/status.md)
+- [EARS specification](openspec/specs/comment-gate/spec.md)
+- [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
+
+## Source layout
+
+```
+sad/src/
+  main.rs          CLI entry-point
+  cli.rs           clap command surface
+  check.rs         gate orchestration and envelope assembly
+  check/           per-check implementations
+  checks/          check identifiers and toggles
+  extract.rs       tree-sitter comment-node extraction
+  extract/         per-language frontends
+  attribution.rs   node → channel attribution
+  scope.rs         attribution-scope selection
+  exemptions.rs    SPDX / generated / exclude handling
+  baseline.rs      shrink-only sad-baseline.json
+  config.rs        sad.toml parsing and defaults
+  remediation.rs   per-check remediation templates
+  envelope.rs      genesis suite envelope shaping
+  model.rs         shared finding types
+```
+
+## Install
+
+```bash
+# macOS
+brew install charly-vibes/charly/sad
+
+# Windows
+scoop bucket add charly https://github.com/charly-vibes/scoop-charly
+scoop install sad
+```
+
+Or from source: `cargo install --path sad --locked` (or `just install` from
+a clone).

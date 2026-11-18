@@ -15,6 +15,9 @@ the fix is a refactor into simpler, more expressive code, not more words.
 > The gate design is [specified](gate-model.md); implementation is under
 > tickets and not shipped.
 
+sad is part of the [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
+— the map of every tool this gate is designed to sit beside.
+
 ## Prerequisites
 
 - **Required:** Rust toolchain (1.98+), `just`

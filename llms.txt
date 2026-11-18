@@ -1,0 +1,72 @@
+# sad
+
+> Rust CLI for a deterministic documentation gate: comments and doc strings
+> outside three structural channels are findings, because prose is evidence
+> the code failed to express itself.
+
+sad gates in-code prose. No network, no models, no randomness: same input
+tree plus the same repo ledgers, same findings. The premise is that code
+should be self-explanatory — the fix for a finding is a refactor into
+simpler, more expressive code, not more words.
+
+## Channels
+
+Prose is legitimate in exactly three structurally checkable places:
+
+- **File header** — a top-of-file block containing `Purpose`,
+  `Responsibilities`, and `Rationale` (gated by `require_header`).
+- **Doc channel** — doc comments and docstrings; the summary lead (text up
+  to the first blank line) is capped at `doc_summary_cap` rendered lines,
+  everything after the first blank line is uncapped.
+- **Traceability markers** — `marker_prefix` + an ID matching
+  `marker_pattern` that resolves against `.beads/issues.jsonl` or
+  `openspec/specs/`.
+
+Licence/SPDX headers, `@generated` regions, `exclude` globs, and every
+suppression directive (`# noqa`, `# type: ignore`, `// @ts-ignore`,
+`// eslint-disable-*`, `sad:ignore <check-id> <reason>`) are
+exempt-but-counted: the envelope reports header/doc counts, markers
+resolved, exemptions, and suppression debt.
+
+## Checks
+
+- `comment_outside_channel` — prose attributed to no channel
+- `doc_summary_cap_exceeded` — doc summary lead over the cap
+- `unresolvable_marker` — marker-prefixed ID that resolves to nothing
+- `missing_header` — first block lacks a required header keyword
+- `suppression_cap_exceeded` — file over `suppression_cap` suppressions
+
+## Commands
+
+- `sad check` — gate the default attribution scope; exits 0 on pass, 1 on
+  findings or gate failure
+- `sad check --all` — analyze every non-excluded file
+- `sad check --adopt` — write and commit `sad-baseline.json` (shrink-only
+  baseline of grandfathered finding IDs, then evaluate against it)
+- `sad version` — tool identity as a genesis suite envelope
+
+Global flags: `--json` (raw envelope), `--config <path>` (default:
+`./sad.toml`, else built-in defaults).
+
+## Install
+
+```bash
+# macOS
+brew install charly-vibes/charly/sad
+
+# Windows
+scoop bucket add charly https://github.com/charly-vibes/scoop-charly
+scoop install sad
+
+# From source
+cargo install --path sad --locked
+```
+
+## Documentation
+
+- [Gate model](docs/src/gate-model.md)
+- [Getting started](docs/src/getting-started.md)
+- [Validation](docs/src/validation.md)
+- [Status](docs/src/status.md)
+- [EARS specification](openspec/specs/comment-gate/spec.md)
+- [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)

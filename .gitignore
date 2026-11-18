@@ -12,6 +12,8 @@
 
 # docs generated from Cargo.toml by CI — never committed
 docs/src/release.md
+# spec pages copied into the book by docs.yml — never committed
+docs/src/specs/
 
 # testaruda local calibration store
 .testaruda/
