@@ -1,0 +1,9 @@
+id = "typescript-and-python-equivalents-are-block-findings"
+description = "Each yields one commented_out_code finding rather than one prose finding per line."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "typescript_and_python_equivalents_are_block_findings"}]

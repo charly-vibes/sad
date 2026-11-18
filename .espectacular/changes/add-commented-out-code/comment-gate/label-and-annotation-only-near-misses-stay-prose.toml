@@ -1,0 +1,9 @@
+id = "label-and-annotation-only-near-misses-stay-prose"
+description = "Both stay prose findings, because the root deny table outranks a call shape."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "label_and_annotation_only_near_misses_stay_prose"}]

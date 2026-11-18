@@ -1,0 +1,9 @@
+id = "predicate-miss-keeps-per-node-prose"
+description = "Each finding-eligible prose node in the run still emits its own comment_outside_channel finding, with its unchanged stable ID."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "predicate_miss_keeps_per_node_prose"}]

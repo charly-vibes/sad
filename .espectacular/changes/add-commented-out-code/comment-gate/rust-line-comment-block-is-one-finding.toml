@@ -1,0 +1,9 @@
+id = "rust-line-comment-block-is-one-finding"
+description = "Exactly one commented_out_code finding is emitted for the block, anchored at the run's first comment node."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "rust_line_comment_block_is_one_finding"}]

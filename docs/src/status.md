@@ -8,9 +8,10 @@
 # Status
 
 **v0.1 gate implemented** — the comment gate runs: tree-sitter frontends
-for Rust, Python and TypeScript; five checks
-(`comment_outside_channel`, `doc_summary_cap_exceeded`,
-`unresolvable_marker`, `missing_header`, `suppression_cap_exceeded`) plus
+for Rust, Python and TypeScript; six checks
+(`comment_outside_channel`, `commented_out_code`,
+`doc_summary_cap_exceeded`, `unresolvable_marker`, `missing_header`,
+`suppression_cap_exceeded`) plus
 `suppression_debt`; agent-attribution scoping; genesis `check` envelope;
 `--adopt` baseline with shrink-only re-adoption. The repository dogfoods it
 (`sad.toml`, `sad-baseline.json`); `just ci` runs the gate through its

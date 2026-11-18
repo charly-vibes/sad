@@ -27,7 +27,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::baseline::{self, Baseline};
-use crate::checks::{RepoContext, doc_cap, header, marker, outside_channel, suppression};
+use crate::checks::{
+    RepoContext, commented_out_code, doc_cap, header, marker, outside_channel, suppression,
+};
 use crate::config::Config;
 use crate::envelope::{CheckReport, CheckStats, FileCounts, GateFailure, growth_message};
 use crate::exemptions;
@@ -136,8 +138,11 @@ fn collect_findings(
     context: &RepoContext,
 ) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
+    let mut commented = commented_out_code::Checker::new();
     for file in analyzed.iter().filter(|file| !file.exempt) {
-        findings.extend(outside_channel::run(file, cfg));
+        let (block_findings, consumed) = commented.run(file, cfg);
+        findings.extend(block_findings);
+        findings.extend(outside_channel::run_excluding(file, cfg, &consumed));
         findings.extend(doc_cap::run(file, cfg));
         findings.extend(marker::run(file, cfg, context));
         findings.extend(header::run(file, cfg));

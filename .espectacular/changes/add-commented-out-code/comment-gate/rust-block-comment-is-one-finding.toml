@@ -1,0 +1,9 @@
+id = "rust-block-comment-is-one-finding"
+description = "Each comment node yields one commented_out_code finding; block gutters are stripped before the parse."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "rust_block_comment_is_one_finding"}]

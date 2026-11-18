@@ -1,0 +1,9 @@
+id = "normalization-yields-identical-ids"
+description = "Every form normalizes to the same block body and therefore the same finding ID."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "normalization_yields_identical_ids"}]

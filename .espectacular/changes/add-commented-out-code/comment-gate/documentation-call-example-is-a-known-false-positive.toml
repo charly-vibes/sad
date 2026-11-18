@@ -1,0 +1,9 @@
+id = "documentation-call-example-is-a-known-false-positive"
+description = "One commented_out_code finding is emitted; only doc channels are excluded, so this accepted false positive is pinned."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "documentation_call_example_is_a_known_false_positive"}]

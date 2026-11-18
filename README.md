@@ -58,7 +58,7 @@ just install
 ```
 
 The [gate model](docs/src/gate-model.md) — three legitimate prose channels,
-five checks, pretender-mirror output contract — is implemented and
+six checks, pretender-mirror output contract — is implemented and
 dogfooded in this repository (pre-release).
 
 ## Current command surface

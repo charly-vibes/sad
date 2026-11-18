@@ -23,6 +23,11 @@ milestone, not by cadence.
   `sad-baseline.json`, `self-gate` recipe in `just ci`); 24 espectacular
   contracts map the EARS scenarios to tests; `just ci` runs spec
   correspondence, the pretender structural gate, the self-gate and spelling.
+- Commented-out code is its own block-scoped finding
+  (`commented_out_code`, on by default): maximal adjacent prose runs are
+  normalised, parsed with the pinned frontend, and emitted once per block
+  with `git log -p --follow <path>` remediation, replacing per-node prose
+  only for matched blocks and failing closed otherwise.
 - Change `specify-gate-objective` archived (2026-11-18): the EARS spec is
   deployed at `openspec/specs/comment-gate/spec.md` and its contracts at
   `.espectacular/comment-gate/`; `just spec-check` now runs the deployed

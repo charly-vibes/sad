@@ -20,8 +20,12 @@ use crate::model::FindingKind;
 /// reader can tell the fixes apart. No clock, network, configuration, or other
 /// finding data is consulted.
 pub fn for_kind(kind: FindingKind, path: &str) -> RemediationEntry {
+    let command = match kind {
+        FindingKind::CommentedOutCode => format!("git log -p --follow {path}"),
+        _ => format!("$EDITOR {path}"),
+    };
     RemediationEntry {
-        command: format!("$EDITOR {path}"),
+        command,
         description: description(kind).to_string(),
     }
 }
@@ -33,6 +37,10 @@ fn description(kind: FindingKind) -> &'static str {
         FindingKind::CommentOutsideChannel => {
             "Move the comment into a documented channel (header, doc, marker, or \
              suppression) or delete it; code should speak for itself."
+        }
+        FindingKind::CommentedOutCode => {
+            "Delete the commented-out code. If it is still needed, recover it from VCS history; \
+             never restore it as a comment."
         }
         FindingKind::DocSummaryCapExceeded => {
             "Shorten the summary lead so it fits the doc summary cap, and keep structured \
@@ -58,9 +66,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn commented_out_code_remediation_is_the_vcs_hatch() {
+        let entry = for_kind(FindingKind::CommentedOutCode, "src/lib.rs");
+        assert_eq!(entry.command, "git log -p --follow src/lib.rs");
+        assert_eq!(
+            entry.description,
+            "Delete the commented-out code. If it is still needed, recover it from VCS \
+             history; never restore it as a comment."
+        );
+    }
+
+    #[test]
     fn every_kind_has_distinct_non_empty_guidance() {
         let kinds = [
             FindingKind::CommentOutsideChannel,
+            FindingKind::CommentedOutCode,
             FindingKind::DocSummaryCapExceeded,
             FindingKind::UnresolvableMarker,
             FindingKind::MissingHeader,
@@ -69,8 +89,12 @@ mod tests {
         let mut descriptions = std::collections::BTreeSet::new();
         for kind in kinds {
             let entry = for_kind(kind, "src/lib.rs");
+            let command = match kind {
+                FindingKind::CommentedOutCode => "git log -p --follow src/lib.rs",
+                _ => "$EDITOR src/lib.rs",
+            };
             assert_eq!(
-                entry.command, "$EDITOR src/lib.rs",
+                entry.command, command,
                 "{kind:?} must render the anchor path"
             );
             assert!(

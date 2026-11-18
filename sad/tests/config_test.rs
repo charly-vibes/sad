@@ -88,6 +88,7 @@ fn assert_io_error(result: Result<Config, ConfigError>) {
 fn assert_defaults(config: &Config, require_header: bool) {
     let expected_checks = CheckToggles {
         comment_outside_channel: true,
+        commented_out_code: true,
         doc_summary_cap_exceeded: true,
         unresolvable_marker: true,
         missing_header: true,
@@ -96,6 +97,10 @@ fn assert_defaults(config: &Config, require_header: bool) {
     assert_eq!(
         config.checks.comment_outside_channel,
         expected_checks.comment_outside_channel
+    );
+    assert_eq!(
+        config.checks.commented_out_code,
+        expected_checks.commented_out_code
     );
     assert_eq!(
         config.checks.doc_summary_cap_exceeded,
@@ -137,6 +142,7 @@ fn assert_defaults(config: &Config, require_header: bool) {
 fn assert_full_config(config: &Config) {
     let expected_checks = CheckToggles {
         comment_outside_channel: false,
+        commented_out_code: false,
         doc_summary_cap_exceeded: false,
         unresolvable_marker: false,
         missing_header: false,
@@ -145,6 +151,10 @@ fn assert_full_config(config: &Config) {
     assert_eq!(
         config.checks.comment_outside_channel,
         expected_checks.comment_outside_channel
+    );
+    assert_eq!(
+        config.checks.commented_out_code,
+        expected_checks.commented_out_code
     );
     assert_eq!(
         config.checks.doc_summary_cap_exceeded,

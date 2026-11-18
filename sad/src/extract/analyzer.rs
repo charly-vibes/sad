@@ -120,7 +120,7 @@ fn parse_source(language: Language, source: &str) -> Option<Tree> {
 }
 
 /// A parser configured with the pinned grammar for `language`.
-fn parser_for(language: Language) -> Option<Parser> {
+pub(crate) fn parser_for(language: Language) -> Option<Parser> {
     let grammar: tree_sitter::Language = match language {
         Language::Rust => tree_sitter_rust::LANGUAGE.into(),
         Language::Python => tree_sitter_python::LANGUAGE.into(),

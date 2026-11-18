@@ -1,0 +1,9 @@
+id = "suppression-id-is-commented-out-code"
+description = "The directive is counted in suppression_debt with check commented_out_code, it is not a prose node and does not join the block, and the block's own finding is unaffected."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "suppression_id_is_commented_out_code"}]

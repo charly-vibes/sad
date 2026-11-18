@@ -1,0 +1,9 @@
+id = "mixed-file-emits-block-findings-and-per-node-prose"
+description = "Two commented_out_code findings and three comment_outside_channel findings are emitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "mixed_file_emits_block_findings_and_per_node_prose"}]

@@ -1,5 +1,12 @@
-#!/usr/bin/env python3
-"""Create or update a Homebrew formula for sad."""
+"""Purpose: create or update the Homebrew formula for sad from release checksums.
+
+Responsibilities: parse checksums.txt, render Formula/sad.rb with the four
+platform URLs and shas, and report each platform digest.
+
+Rationale: the release workflow bumps the tap from the published artifacts, so
+the formula is generated from the same bytes users download instead of being
+hand-edited.
+"""
 import sys
 import os
 

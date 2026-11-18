@@ -121,6 +121,7 @@ pub fn finding_id(path: &str, symbol_path: &str, body: &str) -> String {
 #[serde(rename_all = "snake_case")]
 pub enum FindingKind {
     CommentOutsideChannel,
+    CommentedOutCode,
     DocSummaryCapExceeded,
     UnresolvableMarker,
     MissingHeader,
@@ -132,6 +133,7 @@ impl FindingKind {
     pub fn id(self) -> &'static str {
         match self {
             Self::CommentOutsideChannel => "comment_outside_channel",
+            Self::CommentedOutCode => "commented_out_code",
             Self::DocSummaryCapExceeded => "doc_summary_cap_exceeded",
             Self::UnresolvableMarker => "unresolvable_marker",
             Self::MissingHeader => "missing_header",
@@ -172,6 +174,7 @@ mod tests {
     fn finding_kind_serialises_as_its_check_id() {
         for kind in [
             FindingKind::CommentOutsideChannel,
+            FindingKind::CommentedOutCode,
             FindingKind::DocSummaryCapExceeded,
             FindingKind::UnresolvableMarker,
             FindingKind::MissingHeader,

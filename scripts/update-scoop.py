@@ -1,5 +1,12 @@
-#!/usr/bin/env python3
-"""Create or update a Scoop manifest for sad."""
+"""Purpose: create or update the Scoop manifest for sad from release checksums.
+
+Responsibilities: parse checksums.txt, render bucket/sad.json with the Windows
+URL and sha, and fail when the windows_amd64 checksum is absent.
+
+Rationale: the release workflow bumps the bucket from the published artifacts,
+so the manifest is generated from the same bytes users download instead of being
+hand-edited.
+"""
 import json
 import os
 import sys

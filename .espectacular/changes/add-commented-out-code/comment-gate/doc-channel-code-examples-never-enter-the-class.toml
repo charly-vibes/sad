@@ -1,0 +1,9 @@
+id = "doc-channel-code-examples-never-enter-the-class"
+description = "No commented_out_code finding is emitted, because doc and header nodes are excluded before the predicate runs."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "doc_channel_code_examples_never_enter_the_class"}]

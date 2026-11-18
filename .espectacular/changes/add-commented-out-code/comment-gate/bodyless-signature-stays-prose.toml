@@ -1,0 +1,9 @@
+id = "bodyless-signature-stays-prose"
+description = "It is a prose finding, not a block finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "bodyless_signature_stays_prose"}]

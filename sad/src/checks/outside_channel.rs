@@ -5,7 +5,8 @@
 //! finding-eligible prose node — a body that is empty or whitespace-only is
 //! not prose — anchored to the node's stable (path, symbol, body) identity
 //! and carrying the node body as text, in source order, honouring the
-//! `comment_outside_channel` toggle and staying silent for exempt files.
+//! `comment_outside_channel` toggle, staying silent for exempt files, and
+//! skipping the node indices a matched `commented_out_code` block consumed.
 //! Rationale: narration inside a body is invisible to documentation readers;
 //! keeping the rule purely structural means the check never guesses at intent
 //! or prescribes a refactor, and reusing the node's own identity keeps
@@ -28,13 +29,27 @@ const MESSAGE: &str = "comment is attributed to the prose channel, which is not 
 /// panic. A bare comment separator (`//`, `#`, an empty JSDoc) carries no
 /// narration, so an empty or whitespace-only body is never a finding.
 pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
+    run_excluding(file, cfg, &[])
+}
+
+/// Report every finding-eligible prose node whose index is not in `excluded`.
+///
+/// `excluded` holds the node indices a block-scoped check already consumed;
+/// the rest of the contract is identical to [`run`], including the empty
+/// body, exempt file, toggle, and source-order rules.
+pub fn run_excluding(file: &AnalyzedFile, cfg: &Config, excluded: &[usize]) -> Vec<Finding> {
     if file.exempt || !cfg.checks.comment_outside_channel {
         return Vec::new();
     }
     file.nodes
         .iter()
-        .filter(|node| node.class == AttributionClass::Prose && !node.body.trim().is_empty())
-        .map(|node| Finding {
+        .enumerate()
+        .filter(|(index, node)| {
+            !excluded.contains(index)
+                && node.class == AttributionClass::Prose
+                && !node.body.trim().is_empty()
+        })
+        .map(|(_, node)| Finding {
             check: FindingKind::CommentOutsideChannel,
             id: finding_id(&file.path, &node.symbol_path, &node.body),
             path: file.path.clone(),

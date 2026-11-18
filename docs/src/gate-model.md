@@ -85,12 +85,44 @@ ignore-spam with zero signal.
 | Check | Finding |
 |---|---|
 | `comment_outside_channel` | prose attributed to no channel |
+| `commented_out_code` | prose block whose normalised body parses as code |
 | `doc_summary_cap_exceeded` | doc summary lead over `doc_summary_cap` rendered lines |
 | `unresolvable_marker` | marker-prefixed ID that resolves to nothing |
 | `missing_header` | first block does not contain all three header keywords, when `require_header` is on |
 | `suppression_cap_exceeded` | file over `suppression_cap` suppressions, when a cap is set |
 
 `suppression_debt` is envelope data, never a finding.
+
+## Commented-out code
+
+`commented_out_code` is a finding kind beside `comment_outside_channel`,
+never a seventh attribution class: every node keeps its channel. A
+**block** is a maximal run of finding-eligible prose nodes with no row
+gap (`next.line <= prev.line + prev.text.lines().count()`); same-row
+nodes join and any other node — code, blank separator, doc, header,
+marker, or suppression directive — splits. The block body is normalised
+in a fixed order (line endings and BOM, per-kind marker and gutter
+stripping, the newline join, common-prefix dedent, trailing-whitespace
+and blank-end trim) and hashed as `path::symbol-path::content-hash`
+with the anchor at the run's first node. One block is one finding.
+
+The predicate parses the normalised body with the same pinned frontend
+that attributed the nodes: a clean tree, non-empty root children, every
+root child in the language's closed root-allow table, at least one shape
+node, and no root-deny child, with root deny outranking shape. The
+tables are transcribed against tree-sitter-rust 0.24,
+tree-sitter-python 0.25, and tree-sitter-typescript 0.23; unknown kinds
+fail closed to prose, so a grammar bump has one audit point. A predicate
+miss or `[checks] commented_out_code = false` leaves the per-node
+`comment_outside_channel` findings untouched — the class never buys
+silence by guessing. A directive scoped to `commented_out_code` is
+ordinary suppression debt and does not join a block.
+
+Remediation is hardcoded: `git log -p --follow <path>` with "Delete the
+commented-out code. If it is still needed, recover it from VCS history;
+never restore it as a comment." Known false positive: a plain-comment
+call example such as `// e.g. g();` parses as a call and fires; only doc
+channels are excluded.
 
 ## Scope
 

@@ -1,0 +1,9 @@
+id = "block-adjacency-joins-same-row-and-splits-on-separators"
+description = "The same-row nodes form one block and the separated comment starts another, each judged on its own body."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "block_adjacency_joins_same_row_and_splits_on_separators"}]

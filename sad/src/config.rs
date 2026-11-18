@@ -142,6 +142,8 @@ impl Config {
 pub struct CheckToggles {
     /// Flags commentary used as a channel outside the documented path.
     pub comment_outside_channel: bool,
+    #[doc = "Flags prose blocks whose normalised body parses as code."]
+    pub commented_out_code: bool,
     /// Flags doc summaries longer than `doc_summary_cap`.
     pub doc_summary_cap_exceeded: bool,
     /// Flags markers whose id no resolver can resolve.
@@ -156,6 +158,7 @@ impl Default for CheckToggles {
     fn default() -> Self {
         Self {
             comment_outside_channel: true,
+            commented_out_code: true,
             doc_summary_cap_exceeded: true,
             unresolvable_marker: true,
             missing_header: true,

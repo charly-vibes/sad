@@ -8,6 +8,7 @@ exclude = ["vendor/**", "**/generated/**"]
 
 [checks]
 comment_outside_channel = false
+commented_out_code = false
 doc_summary_cap_exceeded = false
 unresolvable_marker = false
 missing_header = false

@@ -8,6 +8,7 @@
 
 use std::collections::BTreeSet;
 
+pub mod commented_out_code;
 pub mod doc_cap;
 pub mod header;
 pub mod marker;

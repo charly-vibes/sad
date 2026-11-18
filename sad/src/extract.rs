@@ -21,6 +21,7 @@ use tree_sitter::Node;
 use crate::attribution::{MarkerMatcher, classify, has_generated_marker, is_exemption};
 use crate::model::{AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language};
 
+pub(crate) use self::analyzer::parser_for;
 pub use self::analyzer::{Analyzer, analyze_file};
 
 use self::bodies::{comment_body, comment_kind, python_docstring_body};

@@ -1,0 +1,9 @@
+id = "disabled-check-emits-per-node-prose"
+description = "Every finding-eligible prose node emits comment_outside_channel per node and no commented_out_code finding is emitted, so the file is never silent."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "disabled_check_emits_per_node_prose"}]
