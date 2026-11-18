@@ -1,0 +1,9 @@
+id = "header-present-keywords-out-of-order"
+description = "No missing_header finding is emitted when all three keywords appear order-free in the first block."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "complete_header_passes_regardless_of_keyword_order"}]

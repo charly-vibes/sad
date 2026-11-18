@@ -1,0 +1,9 @@
+id = "exclusion-glob"
+description = "No findings are emitted for the path matched by the configured exclude glob."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "exemptions_and_excludes_keep_files_out_of_analysis"}, {flags = "exclude_globs_match_whole_path_segments_at_any_depth"}]

@@ -1,0 +1,9 @@
+id = "rust-file-with-one-node-per-class"
+description = "Each Rust comment node attributes to header, doc, marker, suppression, exemption, or prose."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "rust_one_node_per_class"}]

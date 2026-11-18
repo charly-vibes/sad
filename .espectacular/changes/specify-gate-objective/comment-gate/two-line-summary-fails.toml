@@ -1,0 +1,9 @@
+id = "two-line-summary-fails"
+description = "doc_summary_cap_exceeded is emitted for the doc node whose summary lead spans two lines."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "two_line_doc_lead_exceeds_the_default_cap"}, {flags = "rust_block_two_line_summary_exceeds_the_cap"}]

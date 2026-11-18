@@ -1,0 +1,9 @@
+id = "todo-stub"
+description = "A comment_outside_channel finding is emitted; TODO prose is not a channel."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "module_level_todo_is_file_scoped_prose"}]

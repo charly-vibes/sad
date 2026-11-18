@@ -17,8 +17,9 @@ pub mod suppression;
 /// Repository ledgers a marker id may resolve against.
 ///
 /// The `*_available` flags are the no-op contract: a resolver whose source is
-/// absent (`None` file, missing directory) must not turn every marker into a
-/// finding, so checks consult the flag before judging an id unresolvable.
+/// absent (`None` file, missing directory) or disabled by `[resolvers]` must
+/// not turn every marker into a finding, so checks consult the flag before
+/// judging an id unresolvable.
 #[derive(Debug, Default, Clone)]
 pub struct RepoContext {
     /// Ids found in `.beads/issues.jsonl`.

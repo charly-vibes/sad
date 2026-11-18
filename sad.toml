@@ -1,10 +1,14 @@
 # sad's own configuration — the tool dogfoods its gate on this repository.
-# Defaults live in `src/config.rs`; only intentional overrides belong here.
+# Defaults live in `sad/src/config.rs`; only intentional overrides belong here.
 
 # Source files must open with a Purpose / Responsibilities / Rationale header.
 # Those three keywords are the required header sections; the `missing_header`
 # check enforces them.
 require_header = true
 
+# Test fixtures deliberately contain every violation class the gate detects —
+# they are inputs, never code under the gate.
+exclude = ["sad/tests/fixtures/**"]
+
 # Every other knob is intentionally at its default: caps, marker settings,
-# exclude globs, check toggles, resolvers, and attribution are all unset.
+# check toggles, resolvers, and attribution are all unset.

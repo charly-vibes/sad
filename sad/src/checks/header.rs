@@ -65,7 +65,7 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
             missing.join(", ")
         ),
         text: body,
-        remediation: remediation::for_kind(FindingKind::MissingHeader),
+        remediation: remediation::for_kind(FindingKind::MissingHeader, &file.path),
     }]
 }
 

@@ -1,0 +1,9 @@
+id = "marker-prefix-cannot-launder-a-doc-comment"
+description = "The node stays doc-channel and doc_summary_cap_exceeded is emitted; the resolvable ID neither uncaps nor converts it."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "marker_prefix_cannot_launder_a_doc_comment"}, {flags = "python_docstring_beginning_with_marker_prefix_stays_doc"}, {flags = "rust_doc_beginning_with_marker_prefix_stays_doc"}]

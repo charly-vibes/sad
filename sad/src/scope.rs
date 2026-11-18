@@ -23,7 +23,11 @@
 //!   unshallowed (that would need the network).
 //! - Commit messages are decoded lossily: invalid UTF-8 must not silently
 //!   hide a trailer. Only a git *failure* excludes a file.
+//! - Repository-level facts are resolved once per selection: the shallow
+//!   probe runs once and each revision's trailer verdict is memoised, so a
+//!   commit shared by many files is never re-read.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
@@ -52,55 +56,106 @@ pub fn has_agent_trailer(message: &str, trailer: &str) -> bool {
         return false;
     };
 
-    let mut recognized_prefix = false;
-    let mut trailer_lines: usize = 0;
-    let mut non_trailer_lines: usize = 0;
-    let mut continuation_lines: usize = 0;
-    let mut matching_trailer = false;
-    let mut only_blank_so_far = true;
+    trailer_block(&lines[body_start..], trailer)
+}
 
-    // Walk the last paragraph backwards. The first blank line after content
-    // closes the block, exactly as git delimits it.
-    for &line in lines[body_start..].iter().rev() {
+/// One commit-message line, classified for the backwards trailer scan.
+struct TrailerLine<'a> {
+    /// The line's trailer key, when it has one.
+    key: Option<&'a str>,
+    /// The line is a trailer git generates itself.
+    generated: bool,
+    /// The line continues the trailer above it.
+    continuation: bool,
+}
+
+/// Running totals of a backwards scan over the last paragraph.
+#[derive(Default)]
+struct TrailerScan {
+    recognized_prefix: bool,
+    trailer_lines: usize,
+    non_trailer_lines: usize,
+    continuation_lines: usize,
+    matching_trailer: bool,
+    /// Whether the scan has reached a content line of the paragraph.
+    seen_content: bool,
+}
+
+/// Walk `body` (the message from its first blank line on) backwards and report
+/// whether it is a trailer block carrying `trailer`.
+///
+/// The first blank line after content closes the block, exactly as git
+/// delimits it; comments are skipped the same way.
+fn trailer_block(body: &[&str], trailer: &str) -> bool {
+    let mut scan = TrailerScan::default();
+
+    for &line in body.iter().rev() {
         if is_comment(line) {
-            non_trailer_lines += continuation_lines;
-            continuation_lines = 0;
+            scan.flush_continuation();
             continue;
         }
         if is_blank(line) {
-            if only_blank_so_far {
+            if !scan.seen_content {
                 continue;
             }
-            non_trailer_lines += continuation_lines;
-            return trailer_block_closes(recognized_prefix, trailer_lines, non_trailer_lines)
-                && matching_trailer;
+            scan.flush_continuation();
+            let closes = trailer_block_closes(
+                scan.recognized_prefix,
+                scan.trailer_lines,
+                scan.non_trailer_lines,
+            );
+            return closes && scan.matching_trailer;
         }
-        only_blank_so_far = false;
-
-        let key = trailer_key(line);
-        if is_generated_trailer(line) {
-            trailer_lines += 1;
-            continuation_lines = 0;
-            recognized_prefix = true;
-        } else if key.is_some() {
-            trailer_lines += 1;
-            continuation_lines = 0;
-        } else if line.starts_with(' ') || line.starts_with('\t') {
-            continuation_lines += 1;
-        } else {
-            non_trailer_lines += 1;
-            non_trailer_lines += continuation_lines;
-            continuation_lines = 0;
-        }
-
-        if let Some(key) = key
-            && key.eq_ignore_ascii_case(trailer)
-        {
-            matching_trailer = true;
-        }
+        scan.seen_content = true;
+        scan.absorb(classify_trailer_line(line), trailer);
     }
 
     false
+}
+
+/// Classify a single message line by what it contributes to the trailer scan.
+fn classify_trailer_line(line: &str) -> TrailerLine<'_> {
+    let key = trailer_key(line);
+    let generated = is_generated_trailer(line);
+    TrailerLine {
+        key,
+        generated,
+        continuation: key.is_none()
+            && !generated
+            && (line.starts_with(' ') || line.starts_with('\t')),
+    }
+}
+
+impl TrailerScan {
+    /// Count the pending continuation lines as non-trailer lines.
+    fn flush_continuation(&mut self) {
+        self.non_trailer_lines += self.continuation_lines;
+        self.continuation_lines = 0;
+    }
+
+    /// Fold one classified line into the running totals.
+    fn absorb(&mut self, line: TrailerLine<'_>, trailer: &str) {
+        if line.generated {
+            self.trailer_lines += 1;
+            self.continuation_lines = 0;
+            self.recognized_prefix = true;
+        } else if line.key.is_some() {
+            self.trailer_lines += 1;
+            self.continuation_lines = 0;
+        } else if line.continuation {
+            self.continuation_lines += 1;
+        } else {
+            self.non_trailer_lines += 1;
+            self.flush_continuation();
+        }
+
+        if line
+            .key
+            .is_some_and(|key| key.eq_ignore_ascii_case(trailer))
+        {
+            self.matching_trailer = true;
+        }
+    }
 }
 
 /// The full hash of the last commit that touched `rel_path`, or `None` when
@@ -131,17 +186,26 @@ pub fn governing_revision(repo: &Path, rel_path: &str) -> Option<String> {
 /// is kept when git has no governing commit for it (new or untracked work) or
 /// when that commit's full message carries the configured trailer. Order is
 /// preserved and attribution is never inferred from anything but the trailer.
+///
+/// The repository's shallow state and each revision's trailer verdict are
+/// repository/commit facts, not file facts, so both are resolved once per
+/// selection: many files commonly share one governing commit, and the shallow
+/// probe must not run per file.
 pub fn select(repo: &Path, files: &[String], cfg: &Config, all: bool) -> Vec<String> {
     if all {
         return files.to_vec();
     }
 
     let trailer = cfg.attribution.trailer.as_str();
+    let shallow = is_shallow_repository(repo);
+    let mut verdicts: BTreeMap<String, bool> = BTreeMap::new();
     files
         .iter()
         .filter(|file| match governing_revision(repo, file) {
             None => true,
-            Some(revision) => governing_commit_has_trailer(repo, &revision, trailer),
+            Some(revision) => *verdicts
+                .entry(revision.clone())
+                .or_insert_with(|| governing_commit_has_trailer(repo, &revision, trailer, shallow)),
         })
         .cloned()
         .collect()
@@ -150,12 +214,13 @@ pub fn select(repo: &Path, files: &[String], cfg: &Config, all: bool) -> Vec<Str
 /// Whether the full message of `revision` carries `trailer`; any failure to
 /// read the commit is reported as "not attributed".
 ///
-/// A shallow-clone boundary commit is excluded before its message is read:
-/// the clone cut history off there, so git cannot tell whether that message
-/// is the real origin of the path. Default mode stays conservative and treats
+/// `shallow` is the repository-level shallow state from
+/// [`is_shallow_repository`]: a shallow-clone boundary commit has no parents
+/// and therefore no history that git can consult, so its message is treated as
+/// having no trustworthy trailer. Default mode stays conservative and treats
 /// it as unattributed; `select(..., all = true)` still includes the file.
-fn governing_commit_has_trailer(repo: &Path, revision: &str, trailer: &str) -> bool {
-    if is_shallow_boundary(repo, revision) {
+fn governing_commit_has_trailer(repo: &Path, revision: &str, trailer: &str, shallow: bool) -> bool {
+    if is_shallow_boundary(repo, revision, shallow) {
         return false;
     }
 
@@ -176,21 +241,28 @@ fn governing_commit_has_trailer(repo: &Path, revision: &str, trailer: &str) -> b
     has_agent_trailer(&message, trailer)
 }
 
-/// True when the repository is shallow and `revision` is its history boundary.
+/// The repository's shallow state, asked once per selection.
 ///
-/// In a shallow clone the boundary commit is presented as parentless, so
-/// `rev-list --parents -n 1` printing only the commit itself marks the cut
-/// point. Repositories git cannot confirm as shallow (including versions
-/// without `--is-shallow-repository`) report `false`, which degrades to the
-/// ordinary message check.
-fn is_shallow_boundary(repo: &Path, revision: &str) -> bool {
-    let is_shallow = git_command(repo)
+/// Repositories git cannot confirm as shallow (including versions without
+/// `--is-shallow-repository`) report `false`, which degrades to the ordinary
+/// message check.
+fn is_shallow_repository(repo: &Path) -> bool {
+    git_command(repo)
         .args(["rev-parse", "--is-shallow-repository"])
         .output()
         .is_ok_and(|output| {
             output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
-        });
-    if !is_shallow {
+        })
+}
+
+/// True when `revision` is the history boundary of a shallow clone.
+///
+/// In a shallow clone the boundary commit is presented as parentless, so
+/// `rev-list --parents -n 1` printing only the commit itself marks the cut
+/// point. `shallow` is the repository-level answer; a non-shallow repository
+/// needs no `rev-list` probe at all.
+fn is_shallow_boundary(repo: &Path, revision: &str, shallow: bool) -> bool {
+    if !shallow {
         return false;
     }
 

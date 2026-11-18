@@ -1,0 +1,9 @@
+id = "resolvable-ticket-id"
+description = "The comment is marker-channel and no finding is emitted."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "resolvable_marker_emits_no_findings"}]

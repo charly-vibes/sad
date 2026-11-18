@@ -1,10 +1,27 @@
 {
   "schema_version": 1,
-  "adopted_at": "2026-11-16T21:49:36Z",
+  "adopted_at": "2026-11-18T00:13:30Z",
   "finding_ids": [
+    "sad/tests/check_cli_test.rs::check_accepts_all_and_adopt_flags::min_assertions",
+    "sad/tests/check_cli_test.rs::check_discovers_sad_toml_from_the_working_directory::min_assertions",
+    "sad/tests/check_cli_test.rs::check_json_in_an_empty_directory_emits_an_ok_check_envelope::min_assertions",
+    "sad/tests/check_cli_test.rs::check_with_missing_config_path_fails_and_names_the_path::min_assertions",
     "sad/tests/cli_test.rs::missing_subcommand_is_an_envelope_error_not_help_text::min_assertions",
     "sad/tests/cli_test.rs::unknown_subcommand_emits_envelope_not_clap_text::min_assertions",
     "sad/tests/cli_test.rs::version_json_emits_ok_envelope::min_assertions",
-    "sad/tests/cli_test.rs::version_text_mode_is_a_short_banner::min_assertions"
+    "sad/tests/cli_test.rs::version_text_mode_is_a_short_banner::min_assertions",
+    "sad/tests/config_test.rs::bad_value_types_are_parse_errors::min_assertions",
+    "sad/tests/config_test.rs::default_config_pins_every_documented_default::min_assertions",
+    "sad/tests/config_test.rs::empty_marker_prefix_is_an_invalid_value::min_assertions",
+    "sad/tests/config_test.rs::full_config_parses_every_knob::min_assertions",
+    "sad/tests/config_test.rs::invalid_marker_pattern_is_an_invalid_value::min_assertions",
+    "sad/tests/config_test.rs::load_directory_is_an_io_error::min_assertions",
+    "sad/tests/config_test.rs::load_missing_file_is_an_io_error::min_assertions",
+    "sad/tests/config_test.rs::malformed_toml_is_a_parse_error::min_assertions",
+    "sad/tests/config_test.rs::unknown_keys_are_rejected_as_parse_errors::min_assertions",
+    "sad/tests/config_test.rs::zero_doc_summary_cap_is_an_invalid_value::min_assertions",
+    "sad/tests/extract_test.rs::python_string_literals_do_not_become_comment_nodes::min_assertions",
+    "sad/tests/extract_test.rs::rust_string_literals_do_not_become_comment_nodes::min_assertions",
+    "sad/tests/extract_test.rs::typescript_string_and_template_literals_do_not_become_comment_nodes::min_assertions"
   ]
 }

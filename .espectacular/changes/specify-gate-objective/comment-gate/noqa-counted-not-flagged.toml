@@ -1,0 +1,9 @@
+id = "noqa-counted-not-flagged"
+description = "The envelope carries a suppression_debt entry for the noqa and no comment_outside_channel finding."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "noqa_node_is_suppression_and_counted"}]

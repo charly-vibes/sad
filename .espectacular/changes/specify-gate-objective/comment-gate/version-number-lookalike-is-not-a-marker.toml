@@ -1,0 +1,9 @@
+id = "version-number-lookalike-is-not-a-marker"
+description = "The comment is attributed as finding-eligible prose, not as a marker."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "version_lookalike_is_prose_and_not_flagged"}]

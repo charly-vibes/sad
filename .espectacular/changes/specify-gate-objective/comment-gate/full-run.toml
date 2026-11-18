@@ -1,0 +1,9 @@
+id = "full-run"
+description = "All non-excluded files are analyzed under --all."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "full_run_selects_every_file_in_input_order"}, {flags = "scope_uses_commit_attribution"}]

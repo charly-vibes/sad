@@ -1,0 +1,9 @@
+id = "generated-file-excluded"
+description = "The generated file's comments produce no findings and the envelope reports the file as exempt."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "exempt_generated_file_produces_no_findings"}, {flags = "exemptions_and_excludes_keep_files_out_of_analysis"}, {flags = "exemption_summary_counts_whole_files_and_exempt_nodes"}]

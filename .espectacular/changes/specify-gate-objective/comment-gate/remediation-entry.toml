@@ -1,0 +1,9 @@
+id = "remediation-entry"
+description = "The finding carries a hardcoded remediation entry."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "findings_fail_the_run_with_a_stable_id_and_remediation"}]

@@ -1,0 +1,9 @@
+id = "per-language-fixture-conformance"
+description = "Each of Rust, Python, and TypeScript produces the expected class and envelope set for its one-per-class fixture."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "rust_one_node_per_class"}, {flags = "python_one_node_per_class"}, {flags = "typescript_one_node_per_class"}, {flags = "stats_shape_reports_every_class"}]

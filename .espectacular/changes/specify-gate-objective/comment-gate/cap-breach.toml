@@ -1,0 +1,9 @@
+id = "cap-breach"
+description = "suppression_cap_exceeded is emitted above the configured cap and nothing is emitted under the default no-cap."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "cap_breach_emits_one_file_scoped_finding"}, {flags = "default_suppression_cap_is_off"}]

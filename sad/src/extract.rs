@@ -1,24 +1,36 @@
 //! Purpose: parse Rust, Python, and TypeScript sources with pinned
 //! tree-sitter grammars and extract every comment/doc-string node with its
 //! channel attribution, body, line, and symbol path.
-//! Responsibilities: normalise CRLF and block-comment gutters, walk the parse
-//! tree (never scan text), skip the grammar's `doc_comment` children,
-//! recognise Python docstrings, walk the allowlisted symbol-bearing ancestors
-//! (including the item an outer doc comment documents) for symbol paths,
-//! detect the leading header run by byte span, and mark whole-file exemptions
-//! (a generated-code marker block or exemption-only comments).
+//! Responsibilities: own the public entry points ([`language_for_path`],
+//! [`analyze_file`], [`Analyzer`]), configure one parser per language and one
+//! marker matcher per run, walk the parse tree (never scan text), skip the
+//! grammar's `doc_comment` children, detect the leading header run by byte
+//! span, and mark whole-file exemptions (a generated-code marker block or
+//! exemption-only comments).
 //! Rationale: structural extraction is the single source of truth for every
 //! gate finding; keeping it parse-tree based makes string literals immune and
-//! keeps line attribution independent of regexes or byte heuristics.
+//! keeps line attribution independent of regexes or byte heuristics. Bodies,
+//! symbol resolution, and docstring detection live in submodules so each stays
+//! small enough to audit on its own.
 
 use std::borrow::Cow;
 use std::path::Path;
 
-use tree_sitter::{Node, Parser};
+use tree_sitter::Node;
 
 use crate::attribution::{MarkerMatcher, classify, has_generated_marker, is_exemption};
-use crate::config::Config;
 use crate::model::{AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language};
+
+pub use self::analyzer::{Analyzer, analyze_file};
+
+use self::bodies::{comment_body, comment_kind, python_docstring_body};
+use self::docstrings::python_docstring;
+use self::symbols::symbol_path;
+
+mod analyzer;
+mod bodies;
+mod docstrings;
+mod symbols;
 
 /// Map a path to a supported v1 language by extension.
 pub fn language_for_path(path: &Path) -> Option<Language> {
@@ -30,58 +42,39 @@ pub fn language_for_path(path: &Path) -> Option<Language> {
     }
 }
 
-/// Analyse one source file exactly as the gate would.
-///
-/// `path` selects the grammar; `rel_path` is the stable path reported in the
-/// returned [`AnalyzedFile`]. Unsupported extensions yield an empty analysis
-/// with `Rust` as a neutral placeholder — callers filter by
-/// [`language_for_path`] before relying on the result.
-pub fn analyze_file(path: &Path, rel_path: &str, source: &str, cfg: &Config) -> AnalyzedFile {
-    let Some(language) = language_for_path(path).or_else(|| language_for_path(Path::new(rel_path)))
-    else {
-        // Documented contract: no grammar is ever guessed for an unsupported
-        // extension, so the result is empty rather than a wrong-grammar parse.
-        return empty_file(rel_path, Language::Rust);
-    };
-    let normalised = if source.contains('\r') {
+/// Normalise CRLF line endings so line attribution is stable.
+fn normalise_source(source: &str) -> Cow<'_, str> {
+    if source.contains('\r') {
         Cow::Owned(source.replace("\r\n", "\n"))
     } else {
         Cow::Borrowed(source)
-    };
-    let source = normalised.as_ref();
-    let markers = MarkerMatcher::new(&cfg.marker_pattern);
+    }
+}
 
-    let Some(mut parser) = parser_for(language) else {
-        return empty_file(rel_path, language);
-    };
-    let Some(tree) = parser.parse(source, None) else {
-        return empty_file(rel_path, language);
-    };
+/// Everything the tree walk needs beyond the parse tree itself.
+struct WalkContext<'a> {
+    language: Language,
+    source: &'a str,
+    marker_prefix: &'a str,
+    markers: &'a MarkerMatcher,
+    header_span: Option<(usize, usize)>,
+    module_doc_start: Option<usize>,
+}
 
-    let root = tree.root_node();
-    let (header, header_span, module_doc_start) = detect_header(language, root, source);
-
+/// Walk the parse tree and return the extracted nodes in source order.
+fn collect_nodes(root: Node<'_>, context: WalkContext<'_>) -> Vec<CommentNode> {
     let mut extractor = Extractor {
-        language,
-        source,
-        marker_prefix: &cfg.marker_prefix,
-        markers: &markers,
-        header_span,
-        module_doc_start,
+        language: context.language,
+        source: context.source,
+        marker_prefix: context.marker_prefix,
+        markers: context.markers,
+        header_span: context.header_span,
+        module_doc_start: context.module_doc_start,
         nodes: Vec::new(),
     };
     extractor.walk(root);
     extractor.nodes.sort_by_key(|(start_byte, _)| *start_byte);
-    let nodes: Vec<CommentNode> = extractor.nodes.into_iter().map(|(_, node)| node).collect();
-    let exempt = compute_exempt(&nodes);
-
-    AnalyzedFile {
-        path: rel_path.to_string(),
-        language,
-        nodes,
-        exempt,
-        header,
-    }
+    extractor.nodes.into_iter().map(|(_, node)| node).collect()
 }
 
 fn empty_file(rel_path: &str, language: Language) -> AnalyzedFile {
@@ -92,17 +85,6 @@ fn empty_file(rel_path: &str, language: Language) -> AnalyzedFile {
         exempt: false,
         header: false,
     }
-}
-
-fn parser_for(language: Language) -> Option<Parser> {
-    let grammar: tree_sitter::Language = match language {
-        Language::Rust => tree_sitter_rust::LANGUAGE.into(),
-        Language::Python => tree_sitter_python::LANGUAGE.into(),
-        Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-    };
-    let mut parser = Parser::new();
-    parser.set_language(&grammar).ok()?;
-    Some(parser)
 }
 
 struct Extractor<'a> {
@@ -286,334 +268,6 @@ fn rust_header_span(root: Node<'_>) -> Option<(usize, usize)> {
 fn is_inner_doc(node: Node<'_>) -> bool {
     matches!(node.kind(), "line_comment" | "block_comment")
         && node.child_by_field_name("inner").is_some()
-}
-
-/// First non-comment named child, so a leading Python comment cannot hide a
-/// module docstring.
-fn python_first_statement<'tree>(node: Node<'tree>) -> Option<Node<'tree>> {
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
-        .find(|child| child.kind() != "comment")
-}
-
-/// The docstring of a module/class/function, when its first statement is a
-/// string literal.
-///
-/// Parenthesised literals and implicit concatenation (`("doc")`, `"a" "b"`)
-/// are unwrapped to the first literal, because CPython folds both forms into
-/// the item's `__doc__`.
-fn python_docstring<'tree>(node: Node<'tree>) -> Option<Node<'tree>> {
-    let first = if node.kind() == "module" {
-        python_first_statement(node)?
-    } else {
-        let body = node.child_by_field_name("body")?;
-        python_first_statement(body)?
-    };
-    if first.kind() != "expression_statement" {
-        return None;
-    }
-    let mut cursor = first.walk();
-    let value = first.named_children(&mut cursor).next()?;
-    string_literal(value)
-}
-
-/// Unwrap `parenthesized_expression`/`concatenated_string` wrappers down to
-/// the first string literal, whose `string_content` carries the body.
-fn string_literal<'tree>(mut node: Node<'tree>) -> Option<Node<'tree>> {
-    loop {
-        match node.kind() {
-            "string" => return Some(node),
-            "parenthesized_expression" | "concatenated_string" => {
-                let mut cursor = node.walk();
-                node = node.named_children(&mut cursor).find(|child| {
-                    matches!(
-                        child.kind(),
-                        "string" | "parenthesized_expression" | "concatenated_string"
-                    )
-                })?;
-            }
-            _ => return None,
-        }
-    }
-}
-
-fn comment_kind(language: Language, node: Node<'_>, raw: &str) -> CommentKind {
-    match language {
-        Language::Rust => {
-            if node.child_by_field_name("doc").is_some() {
-                CommentKind::Doc
-            } else if node.kind() == "line_comment" {
-                CommentKind::Line
-            } else {
-                CommentKind::Block
-            }
-        }
-        Language::Python => CommentKind::Line,
-        Language::TypeScript => {
-            if raw.starts_with("//") {
-                CommentKind::Line
-            } else if raw.starts_with("/**") {
-                CommentKind::Doc
-            } else {
-                CommentKind::Block
-            }
-        }
-    }
-}
-
-fn comment_body(
-    language: Language,
-    kind: CommentKind,
-    node: Node<'_>,
-    raw: &str,
-    source: &str,
-) -> String {
-    match language {
-        Language::Rust => strip_rust_marker(raw),
-        Language::Python => match kind {
-            CommentKind::Doc => python_docstring_body(node, raw, source),
-            _ => strip_hash_marker(raw),
-        },
-        Language::TypeScript => strip_typescript_marker(raw),
-    }
-}
-
-fn strip_rust_marker(raw: &str) -> String {
-    let text = raw.trim_end_matches(['\r', '\n']);
-    // `////` is the grammar's plain `//` comment whose text begins with `//`:
-    // strip exactly the first two slashes so a ruler keeps its extra slashes.
-    if let Some(rest) = text.strip_prefix("////") {
-        return strip_one_space(rest).trim_end().to_string();
-    }
-    for marker in ["//!", "///", "//"] {
-        if let Some(rest) = text.strip_prefix(marker) {
-            return strip_one_space(rest).trim_end().to_string();
-        }
-    }
-    for opener in ["/*!", "/**", "/*"] {
-        if let Some(rest) = text.strip_prefix(opener) {
-            let inner = rest.strip_suffix("*/").unwrap_or(rest);
-            return normalise_block_body(inner);
-        }
-    }
-    text.to_string()
-}
-
-/// Normalise a block-comment body: the caller removes the opener (`/*`,
-/// `/**`, `/*!`) and the closing `*/`, this removes the delimiter newline and
-/// the per-line `*` gutter.
-///
-/// Every line loses trailing whitespace, leading whitespace, exactly one
-/// leading `*`, and one optional space after it. Leading and trailing empty
-/// lines are dropped and the rest is joined with `\n`, so a single-line block
-/// yields its trimmed content without a `*` and a starred multi-line block
-/// yields the logical documentation text.
-fn normalise_block_body(inner: &str) -> String {
-    let lines: Vec<&str> = inner
-        .split('\n')
-        .map(|line| {
-            let line = line.trim_end();
-            let line = line.trim_start();
-            let line = line.strip_prefix('*').unwrap_or(line);
-            line.strip_prefix(' ').unwrap_or(line)
-        })
-        .collect();
-    let start = lines
-        .iter()
-        .position(|line| !line.is_empty())
-        .unwrap_or(lines.len());
-    let end = lines
-        .iter()
-        .rposition(|line| !line.is_empty())
-        .map_or(start, |index| index + 1);
-    lines[start..end].join("\n")
-}
-
-fn strip_hash_marker(raw: &str) -> String {
-    let text = raw.trim_end_matches(['\r', '\n']);
-    strip_one_space(text.strip_prefix('#').unwrap_or(text))
-        .trim_end()
-        .to_string()
-}
-
-fn strip_typescript_marker(raw: &str) -> String {
-    let text = raw.trim_end_matches(['\r', '\n']);
-    if let Some(rest) = text.strip_prefix("//") {
-        return strip_one_space(rest).trim_end().to_string();
-    }
-    for opener in ["/**", "/*"] {
-        if let Some(rest) = text.strip_prefix(opener) {
-            let inner = rest.strip_suffix("*/").unwrap_or(rest);
-            return normalise_block_body(inner);
-        }
-    }
-    text.to_string()
-}
-
-fn strip_one_space(text: &str) -> &str {
-    text.strip_prefix(' ').unwrap_or(text)
-}
-
-fn python_docstring_body(node: Node<'_>, raw: &str, source: &str) -> String {
-    let mut cursor = node.walk();
-    if let Some(content) = node
-        .named_children(&mut cursor)
-        .find(|child| child.kind() == "string_content")
-    {
-        return source
-            .get(content.byte_range())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-    }
-    raw.trim()
-        .trim_start_matches(['r', 'u', 'b', 'f'])
-        .trim_matches(['"', '\''])
-        .trim()
-        .to_string()
-}
-
-/// Symbol path for a node: an outer doc comment carries the item it directly
-/// documents, everything else carries its symbol-bearing ancestors; `-` when
-/// the node sits outside every named item.
-fn symbol_path(node: Node<'_>, language: Language, source: &str) -> String {
-    if let Some(path) = documented_symbol_path(node, language, source) {
-        return path;
-    }
-    join_chain(ancestor_names(node.parent(), language, source))
-}
-
-/// Ancestor chain joined by `::`, outermost first.
-fn ancestor_names<'a>(from: Option<Node<'_>>, language: Language, source: &'a str) -> Vec<&'a str> {
-    let mut names = Vec::new();
-    let mut current = from;
-    while let Some(node) = current {
-        if let Some(name) = ancestor_name(node, language, source) {
-            names.push(name);
-        }
-        current = node.parent();
-    }
-    names.reverse();
-    names
-}
-
-fn join_chain(names: Vec<&str>) -> String {
-    if names.is_empty() {
-        "-".to_string()
-    } else {
-        names.join("::")
-    }
-}
-
-/// Symbol path of the item an outer doc comment documents, when there is one.
-///
-/// A `///` line or `/** */` block above `Foo::bar` anchors to `Foo::bar`, not
-/// to the `Foo` container it physically sits in; consecutive doc lines and any
-/// attributes between the doc and the item are skipped. Inner docs and Python
-/// docstrings keep the ancestor rule, because they already belong to their
-/// item.
-fn documented_symbol_path(node: Node<'_>, language: Language, source: &str) -> Option<String> {
-    let is_outer_doc = match language {
-        Language::Rust => node.child_by_field_name("outer").is_some(),
-        Language::TypeScript => {
-            node.kind() == "comment"
-                && source
-                    .get(node.byte_range())
-                    .is_some_and(|raw| raw.starts_with("/**"))
-        }
-        Language::Python => false,
-    };
-    if !is_outer_doc {
-        return None;
-    }
-    let target = symbol_target(next_item(node, language)?, language)?;
-    let names = ancestor_names(Some(target), language, source);
-    (!names.is_empty()).then(|| names.join("::"))
-}
-
-/// First sibling that is neither a comment nor an attribute: the item a doc
-/// comment directly documents.
-fn next_item<'tree>(node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
-    let mut current = node.next_named_sibling();
-    while let Some(sibling) = current {
-        let skip = match language {
-            Language::Rust => matches!(
-                sibling.kind(),
-                "line_comment" | "block_comment" | "attribute_item"
-            ),
-            Language::TypeScript => matches!(sibling.kind(), "comment" | "decorator"),
-            Language::Python => false,
-        };
-        if !skip {
-            return Some(sibling);
-        }
-        current = sibling.next_named_sibling();
-    }
-    None
-}
-
-/// The symbol-bearing declaration a documented sibling introduces, unwrapping
-/// declaration wrappers such as `export_statement` and `lexical_declaration`
-/// so a JSDoc above `export const f = …` anchors to `f`.
-fn symbol_target<'tree>(mut node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
-    for _ in 0..8 {
-        if symbol_field(language, node.kind()).is_some() {
-            return Some(node);
-        }
-        node = declaration_child(node, language)?;
-    }
-    None
-}
-
-fn declaration_child<'tree>(node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
-    if let Some(child) = node.child_by_field_name("declaration") {
-        return Some(child);
-    }
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
-        .find(|child| symbol_field(language, child.kind()).is_some())
-}
-
-/// The field carrying the declared name of a symbol-bearing node kind.
-///
-/// The allowlist is deliberate: generic `name` sniffing would anchor a
-/// comment inside a TypeScript `enum_body` to the first member, making finding
-/// IDs churn when members are reordered. Containers that merely hold
-/// declarations contribute nothing.
-fn symbol_field(language: Language, kind: &str) -> Option<&'static str> {
-    match language {
-        Language::Rust => match kind {
-            "impl_item" => Some("type"),
-            "function_item" | "struct_item" | "enum_item" | "union_item" | "trait_item"
-            | "mod_item" | "const_item" | "static_item" | "type_item" | "macro_definition" => {
-                Some("name")
-            }
-            _ => None,
-        },
-        Language::Python => match kind {
-            "function_definition" | "class_definition" => Some("name"),
-            _ => None,
-        },
-        Language::TypeScript => match kind {
-            "function_declaration"
-            | "method_definition"
-            | "class_declaration"
-            | "interface_declaration"
-            | "type_alias_declaration"
-            | "enum_declaration"
-            | "variable_declarator"
-            | "module"
-            | "internal_module" => Some("name"),
-            _ => None,
-        },
-    }
-}
-
-fn ancestor_name<'a>(node: Node<'_>, language: Language, source: &'a str) -> Option<&'a str> {
-    let field = symbol_field(language, node.kind())?;
-    let child = node.child_by_field_name(field)?;
-    let name = source.get(child.byte_range())?.trim();
-    (!name.is_empty()).then_some(name)
 }
 
 /// Whole-file exemptions are exempt-but-observable: the file's leading comment

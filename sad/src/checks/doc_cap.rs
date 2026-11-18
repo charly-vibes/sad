@@ -52,7 +52,7 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
                     "doc summary lead spans {lead} lines, exceeding the {cap}-line doc_summary_cap"
                 ),
                 text: body,
-                remediation: remediation::for_kind(FindingKind::DocSummaryCapExceeded),
+                remediation: remediation::for_kind(FindingKind::DocSummaryCapExceeded, &file.path),
             });
         }
         start = end;

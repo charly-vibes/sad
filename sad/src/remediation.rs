@@ -1,53 +1,55 @@
-//! Purpose: hold the hardcoded, per-kind remediation guidance every finding
-//! carries in the check envelope.
+//! Purpose: hold the per-kind remediation guidance every finding carries in
+//! the check envelope.
 //! Responsibilities: map each [`FindingKind`] to exactly one stable
-//! [`RemediationEntry`] (an actionable command plus a human description), and
-//! keep that guidance deterministic and free of runtime state.
+//! [`RemediationEntry`] (an actionable command plus a human description),
+//! rendering the finding's repo-relative anchor path into the command so what
+//! the envelope carries is runnable as emitted.
 //! Rationale: remediation is part of the machine contract — the spec requires
 //! every finding to name a fix without prescribing a specific refactor — so
-//! the text lives in one table here rather than being composed at each check
-//! site; identical inputs must always produce identical commands.
+//! the descriptions live in one table here rather than being composed at each
+//! check site; identical inputs must always produce identical commands.
 
 use genesis::envelope::RemediationEntry;
 
 use crate::model::FindingKind;
 
-/// The single hardcoded remediation entry for `kind`.
+/// The hardcoded remediation entry for `kind`, anchored to `path`.
 ///
-/// Commands use `<path>` as the only placeholder (the anchor file the caller
-/// substitutes); descriptions are per kind so a reader can tell the fixes
-/// apart. No clock, network, configuration, or finding data is consulted.
-pub fn for_kind(kind: FindingKind) -> RemediationEntry {
-    let (command, description) = match kind {
-        FindingKind::CommentOutsideChannel => (
-            "$EDITOR <path>",
-            "Move the comment into a documented channel (header, doc, marker, or \
-             suppression) or delete it; code should speak for itself.",
-        ),
-        FindingKind::DocSummaryCapExceeded => (
-            "$EDITOR <path>",
-            "Shorten the summary lead so it fits the doc summary cap, and keep structured \
-             sections after a blank line so they do not count against it.",
-        ),
-        FindingKind::UnresolvableMarker => (
-            "$EDITOR <path>",
-            "Resolve the cited id against the repository ledger (the beads issue or openspec \
-             spec it names) or remove the citation.",
-        ),
-        FindingKind::MissingHeader => (
-            "$EDITOR <path>",
-            "Add a header to the file's first block naming Purpose, Responsibilities, and \
-             Rationale.",
-        ),
-        FindingKind::SuppressionCapExceeded => (
-            "$EDITOR <path>",
-            "Reduce suppression debt by fixing the underlying finding or removing the \
-             directive that hides it.",
-        ),
-    };
+/// `path` is the finding's repo-relative anchor, rendered into the command so
+/// no placeholder survives into the envelope. Descriptions are per kind so a
+/// reader can tell the fixes apart. No clock, network, configuration, or other
+/// finding data is consulted.
+pub fn for_kind(kind: FindingKind, path: &str) -> RemediationEntry {
     RemediationEntry {
-        command: command.to_string(),
-        description: description.to_string(),
+        command: format!("$EDITOR {path}"),
+        description: description(kind).to_string(),
+    }
+}
+
+/// The human description of what fixing `kind` means; never a specific
+/// refactor, only the rule and the lawful outcomes.
+fn description(kind: FindingKind) -> &'static str {
+    match kind {
+        FindingKind::CommentOutsideChannel => {
+            "Move the comment into a documented channel (header, doc, marker, or \
+             suppression) or delete it; code should speak for itself."
+        }
+        FindingKind::DocSummaryCapExceeded => {
+            "Shorten the summary lead so it fits the doc summary cap, and keep structured \
+             sections after a blank line so they do not count against it."
+        }
+        FindingKind::UnresolvableMarker => {
+            "Resolve the cited id against the repository ledger (the beads issue or openspec \
+             spec it names) or remove the citation."
+        }
+        FindingKind::MissingHeader => {
+            "Add a header to the file's first block naming Purpose, Responsibilities, and \
+             Rationale."
+        }
+        FindingKind::SuppressionCapExceeded => {
+            "Reduce suppression debt by fixing the underlying finding or removing the \
+             directive that hides it."
+        }
     }
 }
 
@@ -66,8 +68,11 @@ mod tests {
         ];
         let mut descriptions = std::collections::BTreeSet::new();
         for kind in kinds {
-            let entry = for_kind(kind);
-            assert!(!entry.command.trim().is_empty(), "{kind:?} needs a command");
+            let entry = for_kind(kind, "src/lib.rs");
+            assert_eq!(
+                entry.command, "$EDITOR src/lib.rs",
+                "{kind:?} must render the anchor path"
+            );
             assert!(
                 !entry.description.trim().is_empty(),
                 "{kind:?} needs a description"
@@ -75,14 +80,6 @@ mod tests {
             assert!(
                 descriptions.insert(entry.description.clone()),
                 "{kind:?} must not share another kind's description"
-            );
-            assert!(
-                !entry
-                    .command
-                    .replace("<path>", "")
-                    .chars()
-                    .any(|character| character == '<' || character == '>'),
-                "{kind:?} may only use a <path> placeholder"
             );
         }
     }

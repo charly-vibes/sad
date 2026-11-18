@@ -7,7 +7,8 @@
 //! once per file while resolving each cite to its full id token.
 //! Rationale: attribution is structural and side-effect free, so it lives
 //! apart from tree walking; keeping one precedence function means every
-//! frontend classifies identically.
+//! frontend classifies identically, and giving each suppression form its own
+//! small parser keeps one form's grammar from swallowing another.
 
 use regex::Regex;
 
@@ -130,78 +131,90 @@ pub fn has_generated_marker(body: &str) -> bool {
 }
 
 /// Parse one of the five v1 suppression forms from a marker-stripped body.
+///
+/// Each form has its own parser so one form's grammar cannot swallow another;
+/// the first form that matches owns the body.
 pub fn parse_directive(body: &str) -> Option<SuppressionDirective> {
     let text = body.trim();
     let lower = text.to_ascii_lowercase();
 
-    if let Some(rest) = strip_directive(&lower, text, "sad:ignore") {
-        let mut words = rest.split_whitespace();
-        // A directive scopes to exactly one check, so a `sad:ignore` form with
-        // no check id is prose rather than suppression debt.
-        let check = clean_check(words.next()?);
-        if check.is_empty() {
-            return None;
-        }
-        let reason = words.collect::<Vec<_>>().join(" ");
-        return Some(SuppressionDirective {
-            form: SuppressionForm::SadIgnore,
-            check: Some(check),
-            reason: (!reason.is_empty()).then_some(reason),
-        });
-    }
+    parse_sad_ignore(&lower, text)
+        .or_else(|| parse_noqa(&lower, text))
+        .or_else(|| parse_type_ignore(&lower, text))
+        .or_else(|| parse_ts_ignore(&lower, text))
+        .or_else(|| parse_eslint_disable(&lower, text))
+}
 
-    if let Some(rest) = strip_directive(&lower, text, "noqa") {
-        let check = clean_check(rest);
-        return Some(SuppressionDirective {
-            form: SuppressionForm::Noqa,
-            check: (!check.is_empty()).then_some(check),
-            reason: None,
-        });
+/// `sad:ignore <check> [reason…]`.
+fn parse_sad_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
+    let rest = strip_directive(lower, text, "sad:ignore")?;
+    let mut words = rest.split_whitespace();
+    // A directive scopes to exactly one check, so a `sad:ignore` form with no
+    // check id is prose rather than suppression debt.
+    let check = clean_check(words.next()?);
+    if check.is_empty() {
+        return None;
     }
+    let reason = words.collect::<Vec<_>>().join(" ");
+    Some(SuppressionDirective {
+        form: SuppressionForm::SadIgnore,
+        check: Some(check),
+        reason: (!reason.is_empty()).then_some(reason),
+    })
+}
 
-    if let Some(rest) = strip_directive(&lower, text, "type: ignore") {
-        let check = rest
-            .find('[')
-            .and_then(|start| {
-                rest[start + 1..]
-                    .find(']')
-                    .map(|end| &rest[start + 1..start + 1 + end])
-            })
-            .map(clean_check)
-            .filter(|code| !code.is_empty());
-        return Some(SuppressionDirective {
-            form: SuppressionForm::TypeIgnore,
-            check,
-            reason: None,
-        });
-    }
+/// `noqa[: check[, check…]]`.
+fn parse_noqa(lower: &str, text: &str) -> Option<SuppressionDirective> {
+    let check = clean_check(strip_directive(lower, text, "noqa")?);
+    Some(SuppressionDirective {
+        form: SuppressionForm::Noqa,
+        check: (!check.is_empty()).then_some(check),
+        reason: None,
+    })
+}
 
-    if strip_directive(&lower, text, "@ts-ignore").is_some() {
-        return Some(SuppressionDirective {
-            form: SuppressionForm::TsIgnore,
-            check: None,
-            reason: None,
-        });
-    }
+/// `type: ignore[code]`, where only the bracketed code scopes the directive.
+fn parse_type_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
+    let rest = strip_directive(lower, text, "type: ignore")?;
+    let check = rest
+        .find('[')
+        .and_then(|start| {
+            rest[start + 1..]
+                .find(']')
+                .map(|end| &rest[start + 1..start + 1 + end])
+        })
+        .map(clean_check)
+        .filter(|code| !code.is_empty());
+    Some(SuppressionDirective {
+        form: SuppressionForm::TypeIgnore,
+        check,
+        reason: None,
+    })
+}
 
-    if let Some(rest) = strip_directive(&lower, text, "eslint-disable") {
-        let rest = rest.trim_start();
-        let args = if let Some(args) = rest.strip_prefix("-next-line") {
-            args
-        } else if let Some(args) = rest.strip_prefix("-line") {
-            args
-        } else {
-            rest
-        };
-        let check = args.split("--").next().unwrap_or("").trim();
-        return Some(SuppressionDirective {
-            form: SuppressionForm::EslintDisable,
-            check: (!check.is_empty()).then(|| check.to_string()),
-            reason: None,
-        });
-    }
+/// `@ts-ignore` is unscoped: it carries no check id.
+fn parse_ts_ignore(lower: &str, text: &str) -> Option<SuppressionDirective> {
+    strip_directive(lower, text, "@ts-ignore")?;
+    Some(SuppressionDirective {
+        form: SuppressionForm::TsIgnore,
+        check: None,
+        reason: None,
+    })
+}
 
-    None
+/// `eslint-disable[-line|-next-line] rules`, rules ending at a `--` comment.
+fn parse_eslint_disable(lower: &str, text: &str) -> Option<SuppressionDirective> {
+    let rest = strip_directive(lower, text, "eslint-disable")?.trim_start();
+    let args = rest
+        .strip_prefix("-next-line")
+        .or_else(|| rest.strip_prefix("-line"))
+        .unwrap_or(rest);
+    let check = args.split("--").next().unwrap_or("").trim();
+    Some(SuppressionDirective {
+        form: SuppressionForm::EslintDisable,
+        check: (!check.is_empty()).then(|| check.to_string()),
+        reason: None,
+    })
 }
 
 /// Return the text after `needle` when the lower-cased body starts with it

@@ -2,8 +2,8 @@
 //! comment nodes, attribution channels, stable finding IDs, and the findings
 //! and suppression-debt records every later module produces.
 //! Responsibilities: keep the serialised shape of those records stable,
-//! normalise comment bodies before identity hashing, and expose the check-id
-//! mapping used by the CLI envelope.
+//! normalise comment bodies before identity hashing, and pin the check-id
+//! spelling that findings serialise into the CLI envelope.
 //! Rationale: extraction, attribution, checks, and the envelope all speak in
 //! these types; pinning names and the FNV-1a content hash here makes finding
 //! IDs reproducible across runs and machines.
@@ -189,7 +189,7 @@ mod tests {
             symbol_path: "-".to_string(),
             message: "missing header".to_string(),
             text: "//! no header".to_string(),
-            remediation: crate::remediation::for_kind(FindingKind::MissingHeader),
+            remediation: crate::remediation::for_kind(FindingKind::MissingHeader, "src/lib.rs"),
         };
         let value = serde_json::to_value(&finding).expect("Finding must serialise");
         assert_eq!(value["check"], FindingKind::MissingHeader.id());

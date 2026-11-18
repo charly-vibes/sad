@@ -1,0 +1,9 @@
+id = "check-disabled"
+description = "No missing_header findings are emitted when require_header is off."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "header_check_is_off_by_default"}, {flags = "missing_header_toggle_disables_findings"}]

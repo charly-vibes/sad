@@ -61,7 +61,7 @@ pub fn run(file: &AnalyzedFile, cfg: &Config, ctx: &RepoContext) -> Vec<Finding>
             symbol_path: node.symbol_path.clone(),
             message: format!("traceability marker cites `{id}`, which resolves to no {ledgers}"),
             text: node.body.clone(),
-            remediation: remediation::for_kind(FindingKind::UnresolvableMarker),
+            remediation: remediation::for_kind(FindingKind::UnresolvableMarker, &file.path),
         });
     }
     findings

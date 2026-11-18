@@ -10,7 +10,8 @@
 //! prose, so its file shape is a committed contract and every read failure
 //! must be loud: silently treating a corrupt file as empty would fail open and
 //! hide every finding the team intended to track. Normalising ids at both
-//! boundaries keeps the file byte-stable so adoption diffs are reviewable.
+//! boundaries keeps the id set stable across hand edits and repeated adoption,
+//! so adoption diffs stay reviewable.
 
 use std::fmt;
 use std::fs;
@@ -76,46 +77,103 @@ impl Baseline {
                 path: path.to_path_buf(),
                 message: err.to_string(),
             })?;
+        if baseline.schema_version != SCHEMA_VERSION {
+            return Err(BaselineError::Parse {
+                path: path.to_path_buf(),
+                message: format!(
+                    "unsupported schema_version {} (expected {SCHEMA_VERSION})",
+                    baseline.schema_version
+                ),
+            });
+        }
         // Tolerate hand-edited ordering/duplication without letting it change
         // gate semantics or the next persisted document.
-        baseline.finding_ids.sort();
-        baseline.finding_ids.dedup();
+        baseline.finding_ids = normalize(baseline.finding_ids);
         Ok(Some(baseline))
     }
 
     /// Write a refreshed baseline at `path` from `finding_ids`.
     ///
-    /// The ids are sorted and deduped before persistence. The timestamp is
-    /// the only clock input, so the same tree produces the same id set on
-    /// every adoption.
-    pub fn persist(path: &Path, finding_ids: &[String]) -> Result<Self, BaselineError> {
-        let mut finding_ids = finding_ids.to_vec();
-        finding_ids.sort();
-        finding_ids.dedup();
+    /// The ids are normalised before persistence. `adopted_at` is carried over
+    /// from `existing` while the id set is unchanged, so a no-op re-adoption
+    /// leaves the document byte-stable; otherwise the timestamp is the only
+    /// clock input. The write is atomic: a sibling temp file is renamed over
+    /// `path`, so an interrupted write cannot truncate the committed baseline.
+    pub fn persist(
+        path: &Path,
+        finding_ids: &[String],
+        existing: Option<&Baseline>,
+    ) -> Result<Self, BaselineError> {
+        let finding_ids = normalize(finding_ids.to_vec());
         let baseline = Self {
             schema_version: SCHEMA_VERSION,
-            adopted_at: now_rfc3339_utc(),
+            adopted_at: adopted_at_for(existing, &finding_ids),
             finding_ids,
         };
-
-        if let Some(parent) = path.parent()
-            && !parent.as_os_str().is_empty()
-        {
-            fs::create_dir_all(parent).map_err(|err| BaselineError::Write {
-                path: path.to_path_buf(),
-                message: err.to_string(),
-            })?;
-        }
-        let bytes = serde_json::to_vec_pretty(&baseline).map_err(|err| BaselineError::Write {
-            path: path.to_path_buf(),
-            message: err.to_string(),
-        })?;
-        fs::write(path, bytes).map_err(|err| BaselineError::Write {
-            path: path.to_path_buf(),
-            message: err.to_string(),
-        })?;
+        let mut bytes = serde_json::to_vec_pretty(&baseline)
+            .map_err(|err| write_error(path, &err.to_string()))?;
+        bytes.push(b'\n');
+        create_parent(path)?;
+        write_atomic(path, &bytes)?;
         Ok(baseline)
     }
+}
+
+/// Sort and dedupe ids so hand edits and repeated adoption stay byte-stable.
+fn normalize(mut ids: Vec<String>) -> Vec<String> {
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+/// Keep the loaded stamp while the id set is unchanged; otherwise stamp now.
+fn adopted_at_for(existing: Option<&Baseline>, ids: &[String]) -> String {
+    match existing {
+        Some(previous) if previous.finding_ids == ids => previous.adopted_at.clone(),
+        _ => now_rfc3339_utc(),
+    }
+}
+
+/// A typed `Write` failure naming the baseline path.
+fn write_error(path: &Path, message: &str) -> BaselineError {
+    BaselineError::Write {
+        path: path.to_path_buf(),
+        message: message.to_string(),
+    }
+}
+
+/// Create the baseline's parent directory when it has one.
+fn create_parent(path: &Path) -> Result<(), BaselineError> {
+    let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    else {
+        return Ok(());
+    };
+    fs::create_dir_all(parent).map_err(|err| write_error(path, &err.to_string()))
+}
+
+/// Write `bytes` to `path` via a sibling temp file renamed over the target.
+///
+/// The temp file lives in the target's directory so the rename stays on one
+/// filesystem, and it is removed when either step fails.
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), BaselineError> {
+    let temp = temp_path(path);
+    let result = fs::write(&temp, bytes).and_then(|()| fs::rename(&temp, path));
+    if let Err(err) = result {
+        let _ = fs::remove_file(&temp);
+        return Err(write_error(path, &err.to_string()));
+    }
+    Ok(())
+}
+
+/// Sibling temp path on the target's filesystem, unique to this process.
+fn temp_path(path: &Path) -> PathBuf {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| BASELINE_FILE.to_string());
+    path.with_file_name(format!("{name}.tmp-{}", std::process::id()))
 }
 
 impl fmt::Display for BaselineError {
@@ -189,6 +247,12 @@ mod tests {
     fn timestamp_is_rfc3339_utc() {
         assert_eq!(format_rfc3339_utc(0), "1970-01-01T00:00:00Z");
         assert_eq!(format_rfc3339_utc(1_700_000_000), "2023-11-14T22:13:20Z");
+        // Century leap day (divisible by 400).
+        assert_eq!(format_rfc3339_utc(951_782_400), "2000-02-29T00:00:00Z");
+        // Ordinary leap day (divisible by 4, not by 100).
+        assert_eq!(format_rfc3339_utc(1_709_164_800), "2024-02-29T00:00:00Z");
+        // Year rollover one second early.
+        assert_eq!(format_rfc3339_utc(1_704_067_199), "2023-12-31T23:59:59Z");
     }
 
     #[test]
@@ -197,14 +261,53 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("fixture tree is created");
         let path = root.join(BASELINE_FILE);
-        let written =
-            Baseline::persist(&path, &["b".to_string(), "a".to_string(), "b".to_string()])
-                .expect("baseline is written");
+        let written = Baseline::persist(
+            &path,
+            &["b".to_string(), "a".to_string(), "b".to_string()],
+            None,
+        )
+        .expect("baseline is written");
         assert_eq!(written.finding_ids, vec!["a", "b"]);
         let loaded = Baseline::load(&path)
             .expect("baseline loads")
             .expect("baseline is present");
         assert_eq!(loaded, written);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_unchanged_id_set_keeps_adopted_at() {
+        let root = std::env::temp_dir().join(format!("sad-baseline-stamp-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("fixture tree is created");
+        let path = root.join(BASELINE_FILE);
+        let existing = Baseline {
+            schema_version: SCHEMA_VERSION,
+            adopted_at: "2000-02-29T00:00:00Z".to_string(),
+            finding_ids: vec!["a".to_string()],
+        };
+        let written = Baseline::persist(&path, &["a".to_string()], Some(&existing))
+            .expect("baseline is written");
+        assert_eq!(written.adopted_at, existing.adopted_at);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_changed_id_set_gets_a_fresh_adopted_at() {
+        let root =
+            std::env::temp_dir().join(format!("sad-baseline-restamp-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("fixture tree is created");
+        let path = root.join(BASELINE_FILE);
+        let existing = Baseline {
+            schema_version: SCHEMA_VERSION,
+            adopted_at: "2000-02-29T00:00:00Z".to_string(),
+            finding_ids: vec!["a".to_string()],
+        };
+        let written =
+            Baseline::persist(&path, &["a".to_string(), "b".to_string()], Some(&existing))
+                .expect("baseline is written");
+        assert_ne!(written.adopted_at, existing.adopted_at);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -218,6 +321,27 @@ mod tests {
         fs::write(&path, "not json").expect("fixture is written");
         let error = Baseline::load(&path).expect_err("corrupt baseline must fail");
         assert!(error.to_string().contains(BASELINE_FILE));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_unsupported_schema_version_is_a_parse_error() {
+        let root = std::env::temp_dir().join(format!("sad-baseline-schema-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("fixture tree is created");
+        let path = root.join(BASELINE_FILE);
+        fs::write(
+            &path,
+            r#"{"schema_version":2,"adopted_at":"2026-01-01T00:00:00Z","finding_ids":[]}"#,
+        )
+        .expect("fixture is written");
+        let error = Baseline::load(&path).expect_err("a future schema must fail");
+        let message = error.to_string();
+        assert!(message.contains(BASELINE_FILE), "names the path: {message}");
+        assert!(
+            message.contains("schema_version 2"),
+            "names the version: {message}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

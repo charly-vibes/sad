@@ -42,7 +42,7 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
             symbol_path: node.symbol_path.clone(),
             message: MESSAGE.to_string(),
             text: node.body.clone(),
-            remediation: remediation::for_kind(FindingKind::CommentOutsideChannel),
+            remediation: remediation::for_kind(FindingKind::CommentOutsideChannel, &file.path),
         })
         .collect()
 }

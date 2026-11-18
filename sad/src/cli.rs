@@ -16,8 +16,9 @@ use clap::{Parser, Subcommand};
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
 use serde::Serialize;
 
+use crate::baseline::{self, BaselineError};
 use crate::config::{Config, ConfigError};
-use crate::{baseline, check, envelope};
+use crate::{check, envelope};
 
 /// Auto-discovered config file name, relative to the working directory.
 const DEFAULT_CONFIG_FILE: &str = "sad.toml";
@@ -47,7 +48,8 @@ pub enum Command {
         /// Analyze every file instead of only changed ones.
         #[arg(long)]
         all: bool,
-        /// Adopt existing documentation instead of reporting it.
+        /// Adopt existing documentation instead of reporting it; implies
+        /// `--all` so adoption always sees the whole tree.
         #[arg(long)]
         adopt: bool,
         /// Explicit `sad.toml` path; defaults to `./sad.toml` when present.
@@ -119,35 +121,85 @@ fn config_error_envelope(path: &Path, err: &ConfigError) -> serde_json::Value {
     )
 }
 
-/// Error envelope for a baseline gate failure — corrupt, unreadable, or
-/// growth-violating `sad-baseline.json`. The message names the artifact and
-/// the remediation is non-empty by construction.
-fn gate_failure_envelope(failure: &check::GateFailure) -> serde_json::Value {
-    let remediation = match failure {
-        check::GateFailure::Baseline(_) => vec![RemediationEntry {
-            command: format!("rm {} && sad check --adopt", baseline::BASELINE_FILE),
-            description: format!(
-                "Fix or delete the unusable `{}`, then re-adopt the current findings; a corrupt \
-                 baseline is never ignored.",
-                baseline::BASELINE_FILE
-            ),
-        }],
-        check::GateFailure::Growth { .. } => vec![RemediationEntry {
-            command: "sad check --adopt".into(),
-            description: format!(
-                "Fix the remaining findings, then re-adopt so `{}` only shrinks; never add ids \
-                 to grow it.",
-                baseline::BASELINE_FILE
-            ),
-        }],
+/// Error envelope for a gate failure — a corrupt, unreadable, or
+/// growth-violating `sad-baseline.json`, or a beads ledger that cannot judge
+/// ids. The message names the artifact and the remediation is non-empty by
+/// construction; `config` is threaded through so a re-adoption hint repeats
+/// the invocation the caller actually used.
+fn gate_failure_envelope(
+    failure: &envelope::GateFailure,
+    config: Option<&Path>,
+) -> serde_json::Value {
+    let (module, remediation) = match failure {
+        envelope::GateFailure::Baseline(error) => ("baseline", baseline_remediation(error, config)),
+        envelope::GateFailure::Growth { .. } => ("baseline", growth_remediation(config)),
+        envelope::GateFailure::Ledger { .. } => ("resolvers", ledger_remediation()),
     };
     spec_error_envelope(
         failure.code(),
         &failure.to_string(),
         None,
-        "baseline",
+        module,
         remediation,
     )
+}
+
+/// The effective re-adoption invocation, including `--config` when supplied.
+fn adopt_invocation(config: Option<&Path>) -> String {
+    match config {
+        Some(path) => format!("sad check --all --adopt --config {}", path.display()),
+        None => "sad check --all --adopt".to_string(),
+    }
+}
+
+/// Remediation for a typed baseline failure, chosen by what failed.
+///
+/// `Write` means the artifact is sound but unwritable; read/parse failures
+/// mean the document itself must be fixed or deleted before re-adoption.
+fn baseline_remediation(error: &BaselineError, config: Option<&Path>) -> Vec<RemediationEntry> {
+    let adopt = adopt_invocation(config);
+    match error {
+        BaselineError::Write { .. } => vec![RemediationEntry {
+            command: adopt.clone(),
+            description: format!(
+                "Ensure the `{}` path and its directory are writable, then re-run `{adopt}`.",
+                baseline::BASELINE_FILE
+            ),
+        }],
+        BaselineError::Read { .. } | BaselineError::Parse { .. } => vec![RemediationEntry {
+            command: format!("rm {} && {adopt}", baseline::BASELINE_FILE),
+            description: format!(
+                "Fix or delete the unusable `{}`, then re-run `{adopt}`; a corrupt baseline is \
+                 never ignored.",
+                baseline::BASELINE_FILE
+            ),
+        }],
+    }
+}
+
+/// Remediation for adoption growth: fix prose, then re-run the same adoption.
+fn growth_remediation(config: Option<&Path>) -> Vec<RemediationEntry> {
+    let command = adopt_invocation(config);
+    vec![RemediationEntry {
+        description: format!(
+            "Fix the remaining findings, then re-run `{command}` so `{}` only shrinks; never \
+             add ids to grow it.",
+            baseline::BASELINE_FILE
+        ),
+        command,
+    }]
+}
+
+/// Remediation for a broken beads ledger resolver source.
+fn ledger_remediation() -> Vec<RemediationEntry> {
+    vec![RemediationEntry {
+        command: format!("bd export -o {}", check::BEADS_LEDGER),
+        description: format!(
+            "Restore or re-export `{}` so every line is one JSON record carrying an id, or turn \
+             the resolver off with `[resolvers] beads = false` in `sad.toml`.",
+            check::BEADS_LEDGER
+        ),
+    }]
 }
 
 /// The single dispatch: every command returns its envelope serialized to
@@ -157,14 +209,14 @@ pub fn run(command: Command) -> String {
         Command::Version => serde_json::to_value(version_envelope()),
         Command::Check { all, adopt, config } => {
             match resolve_config(config.as_deref()) {
-                Ok(config) => {
+                Ok(resolved) => {
                     // The gate always analyses the working directory, which is
                     // what the CLI contract documents; an unavailable cwd
                     // degrades to a relative "." rather than panicking.
                     let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    match check::run(&repo, &config, all, adopt) {
+                    match check::run(&repo, &resolved, all, adopt) {
                         Ok(report) => serde_json::to_value(envelope::check_envelope(report)),
-                        Err(failure) => Ok(gate_failure_envelope(&failure)),
+                        Err(failure) => Ok(gate_failure_envelope(&failure, config.as_deref())),
                     }
                 }
                 Err((path, err)) => Ok(config_error_envelope(&path, &err)),
@@ -235,14 +287,7 @@ pub fn argument_error_envelope(err: &clap::Error) -> String {
 pub fn render_text(json: &str) -> String {
     let v: serde_json::Value = serde_json::from_str(json).expect("run() always emits valid JSON");
     if v["envelope_kind"] == "check" {
-        let findings = v["data"]["stats"]["findings"].as_u64().unwrap_or(0);
-        let files = v["data"]["stats"]["files_analyzed"].as_u64().unwrap_or(0);
-        let verdict = if v["ok"].as_bool().unwrap_or(false) {
-            "pass"
-        } else {
-            "fail"
-        };
-        return format!("sad check — {verdict}: {findings} findings in {files} files\n");
+        return check_text(&v);
     }
     if v["ok"].as_bool().unwrap_or(false) {
         let name = v["data"]["name"].as_str().unwrap_or("sad");
@@ -255,6 +300,57 @@ pub fn render_text(json: &str) -> String {
             v["data"]["message"].as_str().unwrap_or("unknown error")
         )
     }
+}
+
+/// One-line check summary: the verdict, the new-finding and analysed-file
+/// counts, and the first finding as `path:line check_id` with its remediation
+/// command when the envelope carries one — the actionable part of the JSON.
+fn check_text(v: &serde_json::Value) -> String {
+    let stats = &v["data"]["stats"];
+    let findings = stats["findings"].as_u64().unwrap_or(0);
+    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
+    let verdict = if v["ok"].as_bool().unwrap_or(false) {
+        "pass"
+    } else {
+        "fail"
+    };
+    let mut line = format!(
+        "sad check — {verdict}: {findings} {} in {files} {}",
+        plural(findings, "finding"),
+        plural(files, "file"),
+    );
+    if let Some(brief) = first_finding_brief(&v["data"]["findings"]) {
+        line.push_str("; ");
+        line.push_str(&brief);
+    }
+    line.push('\n');
+    line
+}
+
+/// `count` copies of `noun`, pluralised by appending `s`.
+fn plural(count: u64, noun: &str) -> String {
+    if count == 1 {
+        noun.to_string()
+    } else {
+        format!("{noun}s")
+    }
+}
+
+/// The first reported finding as `path:line check_id`, followed by its
+/// remediation command when present; `None` when there is no finding to name.
+fn first_finding_brief(findings: &serde_json::Value) -> Option<String> {
+    let finding = findings.as_array()?.first()?;
+    let path = finding["path"].as_str()?;
+    let line = finding["line"].as_u64()?;
+    let check = finding["check"].as_str()?;
+    let mut brief = format!("{path}:{line} {check}");
+    if let Some(command) = finding["remediation"]["command"]
+        .as_str()
+        .filter(|command| !command.is_empty())
+    {
+        brief.push_str(&format!(" (fix: {command})"));
+    }
+    Some(brief)
 }
 
 /// Exit status mirrors the envelope: `ok:false` is never reported as

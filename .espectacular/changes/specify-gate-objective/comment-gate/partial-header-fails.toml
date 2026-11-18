@@ -1,0 +1,9 @@
+id = "partial-header-fails"
+description = "A missing_header finding is emitted; all three keywords are required."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "partial_header_emits_missing_header_with_file_scoped_id"}, {flags = "multiline_first_block_without_rationale_still_fails"}]

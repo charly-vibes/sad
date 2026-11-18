@@ -1,0 +1,9 @@
+id = "fabricated-id"
+description = "An unresolvable_marker finding is emitted for an ID that resolves to nothing."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.2"
+
+[tests]
+cargo = [{flags = "fabricated_marker_emits_one_unresolvable_marker"}]

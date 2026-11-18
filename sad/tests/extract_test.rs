@@ -1,58 +1,17 @@
 //! Purpose: contract tests for comment extraction and channel attribution
-//! (`sad::extract` + `sad::model`).
-//! Responsibilities: pin one node per attribution class for Rust, Python, and
-//! TypeScript; doc precedence over markers and suppressions; suppression
-//! directive capture; string-literal immunity; CRLF/body normalisation;
-//! symbol paths; and the stable-ID model helpers.
+//! (`sad::extract` + `sad::model`) across Rust, Python, and TypeScript.
+//! Responsibilities: pin one node per attribution class, doc precedence over
+//! markers and suppressions, suppression directive capture, string-literal
+//! immunity, CRLF/body normalisation, and language detection of each fixture.
 //! Rationale: every gate finding is derived from these structural
 //! attributions, so each channel must be locked down by realistic fixtures
 //! that the pinned tree-sitter grammars parse without error nodes.
 
-use std::path::{Path, PathBuf};
+mod support;
 
-use sad::config::Config;
-use sad::extract::{analyze_file, language_for_path};
-use sad::model::{
-    AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language, SuppressionForm,
-    content_hash, finding_id,
-};
+use sad::model::{AttributionClass, CommentKind, Language, SuppressionForm};
 
-fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/attribution")
-}
-
-/// Analyses a fixture on disk exactly as the gate would.
-#[track_caller]
-fn analyze(group: &str, name: &str) -> AnalyzedFile {
-    let path = fixtures_dir().join(group).join(name);
-    let rel_path = format!("tests/fixtures/attribution/{group}/{name}");
-    let source = std::fs::read_to_string(&path)
-        .unwrap_or_else(|err| panic!("fixture {} must be readable: {err}", path.display()));
-    analyze_file(&path, &rel_path, &source, &Config::default())
-}
-
-#[track_caller]
-fn node_at(file: &AnalyzedFile, line: usize) -> &CommentNode {
-    file.nodes
-        .iter()
-        .find(|node| node.line == line)
-        .unwrap_or_else(|| panic!("{} must carry a comment node at line {line}", file.path))
-}
-
-#[track_caller]
-fn assert_nodes(file: &AnalyzedFile, expected: &[(usize, CommentKind, AttributionClass)]) {
-    let actual: Vec<(usize, CommentKind, AttributionClass)> = file
-        .nodes
-        .iter()
-        .map(|node| (node.line, node.kind, node.class))
-        .collect();
-    assert_eq!(
-        actual.as_slice(),
-        expected,
-        "node attribution of {} must match, in source order",
-        file.path
-    );
-}
+use support::extract::*;
 
 // spec: Channel attribution / Rust file with one node per class.
 #[test]
@@ -191,21 +150,6 @@ fn rust_crlf_classifies_identically_and_bodies_have_no_carriage_returns() {
     assert_eq!(node_at(&file, 9).body, "this function calculates the total");
 }
 
-// spec: Prose outside channels is a finding / findings anchor to the nearest named ancestor chain.
-#[test]
-fn rust_symbol_paths_chain_named_ancestors() {
-    let file = analyze("rust", "nested_symbols.rs");
-    assert_eq!(
-        node_at(&file, 5).symbol_path,
-        "-",
-        "a comment outside every item is file-scoped"
-    );
-    assert_eq!(node_at(&file, 10).symbol_path, "Foo");
-    assert_eq!(node_at(&file, 12).symbol_path, "Foo::bar");
-    assert_eq!(node_at(&file, 17).symbol_path, "x");
-    assert_eq!(node_at(&file, 20).symbol_path, "x::nested");
-}
-
 // spec: Channel attribution / TypeScript and Python parity with the Rust classes.
 #[test]
 fn python_one_node_per_class() {
@@ -327,78 +271,4 @@ fn typescript_string_and_template_literals_do_not_become_comment_nodes() {
             (8, CommentKind::Line, AttributionClass::Prose),
         ],
     );
-}
-
-// spec: Prose outside channels is a finding / stable ID carries a 64-bit content hash.
-#[test]
-fn content_hash_is_sixteen_lowercase_hex_and_normalises_whitespace() {
-    let hash = content_hash("this function calculates the total");
-    assert_eq!(hash.len(), 16, "hash is 64-bit FNV-1a rendered as hex");
-    assert!(
-        hash.chars()
-            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
-        "hash is lowercase hex, got {hash:?}"
-    );
-    assert_eq!(
-        hash,
-        content_hash("this function calculates the total"),
-        "the same body always hashes the same"
-    );
-    assert_eq!(
-        content_hash("this function calculates the total"),
-        content_hash("this function calculates the total   "),
-        "trailing whitespace does not change identity"
-    );
-    assert_eq!(
-        content_hash("a\nb"),
-        content_hash("a\r\nb"),
-        "CRLF and LF bodies share an identity"
-    );
-    assert_ne!(
-        content_hash("this function calculates the total"),
-        content_hash("this function calculates the sum"),
-        "changed body text changes identity"
-    );
-}
-
-// spec: Prose outside channels is a finding / ID is `path::symbol::hash`.
-#[test]
-fn finding_id_composes_path_symbol_and_hash() {
-    let hash = content_hash("this function calculates the total");
-    assert_eq!(
-        finding_id(
-            "src/lib.rs",
-            "Foo::bar",
-            "this function calculates the total"
-        ),
-        format!("src/lib.rs::Foo::bar::{hash}")
-    );
-    assert_eq!(
-        finding_id("src/lib.rs", "-", "this function calculates the total"),
-        format!("src/lib.rs::-::{hash}"),
-        "file-scoped findings use `-` as the symbol path"
-    );
-}
-
-// spec: Language frontends / v1 recognizes .rs, .py, and .ts only.
-#[test]
-fn language_for_path_recognises_v1_extensions() {
-    assert!(matches!(
-        language_for_path(Path::new("src/a.rs")),
-        Some(Language::Rust)
-    ));
-    assert!(matches!(
-        language_for_path(Path::new("pkg/a.py")),
-        Some(Language::Python)
-    ));
-    assert!(matches!(
-        language_for_path(Path::new("web/a.ts")),
-        Some(Language::TypeScript)
-    ));
-    assert!(
-        language_for_path(Path::new("web/a.tsx")).is_none(),
-        "v1 does not claim TSX"
-    );
-    assert!(language_for_path(Path::new("docs/a.md")).is_none());
-    assert!(language_for_path(Path::new("Cargo.toml")).is_none());
 }

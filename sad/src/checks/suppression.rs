@@ -3,7 +3,8 @@
 //! Responsibilities: turn every suppression-class comment node into one
 //! [`SuppressionEntry`] in source order (path, line, form, scoped check id),
 //! and emit exactly one file-scoped `suppression_cap_exceeded` finding when a
-//! file's debt exceeds `cfg.suppression_cap` and the check is enabled.
+//! file's debt exceeds `cfg.suppression_cap` and the check is enabled; the
+//! finding's stable id hashes a sorted directive token list, never a line.
 //! Rationale: suppression debt is exempt-but-counted, so both the debt ledger
 //! and the cap breach must be pure functions of the analyzed file plus config;
 //! one entry per directive keeps a missed directive or a silently disabled cap
@@ -40,59 +41,71 @@ pub fn entries(file: &AnalyzedFile) -> Vec<SuppressionEntry> {
 ///
 /// A missing cap (`None`) is the v0.1 default and emits nothing; a disabled
 /// toggle emits nothing even on breach. A breach is strictly `debt > cap`, so
-/// debt equal to the cap is tolerated. The finding is file-scoped: it carries
-/// `-` as its symbol path and is anchored at line 1.
-///
-/// Its stable id hashes the sorted multiset of directive forms (each with its
-/// scoped check id, duplicates preserved) and never a line number, so moving a
-/// directive within the file — or inserting code above it — leaves the id
-/// unchanged, while adding, removing, or rescoping a directive changes it.
+/// debt equal to the cap is tolerated.
 pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
-    if !cfg.checks.suppression_cap_exceeded {
-        return Vec::new();
-    }
-    let Some(cap) = cfg.suppression_cap else {
+    let Some(cap) = cap_in_force(cfg) else {
         return Vec::new();
     };
-
     let debt = entries(file);
     if debt.len() <= cap {
         return Vec::new();
     }
+    vec![cap_finding(file, &debt, cap)]
+}
 
+/// The cap to enforce, when the cap check is enabled and a cap is configured.
+///
+/// Both a disabled toggle and an absent cap resolve to "no cap in force", so
+/// callers need not repeat those two guards.
+fn cap_in_force(cfg: &Config) -> Option<usize> {
+    if !cfg.checks.suppression_cap_exceeded {
+        return None;
+    }
+    cfg.suppression_cap
+}
+
+/// The single file-scoped `suppression_cap_exceeded` finding for `debt`.
+///
+/// The finding is anchored at line 1 and carries `-` as its symbol path. Its
+/// stable id hashes the sorted multiset of directive forms (each with its
+/// scoped check id, duplicates preserved) and never a line number, so moving a
+/// directive within the file — or inserting code above it — leaves the id
+/// unchanged, while adding, removing, or rescoping a directive changes it.
+fn cap_finding(file: &AnalyzedFile, debt: &[SuppressionEntry], cap: usize) -> Finding {
     // Hash input: sorted `form` / `form:check` items, duplicates preserved.
     // Lines stay out of the id and only annotate the human-readable `text`.
-    let mut identity = debt
-        .iter()
-        .map(|entry| match entry.check.as_deref() {
-            Some(check) => format!("{}:{check}", form_id(entry.form)),
-            None => form_id(entry.form).to_string(),
-        })
-        .collect::<Vec<_>>();
+    let mut identity = debt.iter().map(identity_key).collect::<Vec<_>>();
     identity.sort_unstable();
-    let identity = identity.join("|");
-    let directives = debt
-        .iter()
-        .map(|entry| format!("{}@{}", form_id(entry.form), entry.line))
-        .collect::<Vec<_>>()
-        .join(",");
-    let message = format!(
-        "{} carries {} suppression directives, exceeding the configured cap of {}",
-        file.path,
-        debt.len(),
-        cap
-    );
-
-    vec![Finding {
+    Finding {
         check: FindingKind::SuppressionCapExceeded,
-        id: finding_id(&file.path, "-", &identity),
+        id: finding_id(&file.path, "-", &identity.join("|")),
         path: file.path.clone(),
         line: 1,
         symbol_path: "-".to_string(),
-        message,
-        text: directives,
-        remediation: remediation::for_kind(FindingKind::SuppressionCapExceeded),
-    }]
+        message: format!(
+            "{} carries {} suppression directives, exceeding the configured cap of {}",
+            file.path,
+            debt.len(),
+            cap
+        ),
+        text: debt
+            .iter()
+            .map(|entry| format!("{}@{}", form_id(entry.form), entry.line))
+            .collect::<Vec<_>>()
+            .join(","),
+        remediation: remediation::for_kind(FindingKind::SuppressionCapExceeded, &file.path),
+    }
+}
+
+/// One identity token for the cap finding's id: form plus scoped check id.
+///
+/// The line never enters the token, and tokens are not deduplicated, so two
+/// identical directives still contribute two tokens to the hash.
+fn identity_key(entry: &SuppressionEntry) -> String {
+    match entry.check.as_deref() {
+        Some(check) => format!("{}:{check}", form_id(entry.form)),
+        None => form_id(entry.form).to_string(),
+    }
 }
 
 /// Snake-case label for a directive form, matching its serialised spelling.
@@ -165,10 +178,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cap_finding_id_ignores_line_drift_and_directive_order() {
-        let cfg = cap_config(2);
-        let nodes = vec![
+    /// Three directives against a cap of two: one unambiguous breach, reused
+    /// by the id-stability tests.
+    fn over_cap_nodes() -> Vec<CommentNode> {
+        vec![
             directive_node(3, SuppressionForm::Noqa, None),
             directive_node(7, SuppressionForm::Noqa, None),
             directive_node(
@@ -176,7 +189,13 @@ mod tests {
                 SuppressionForm::SadIgnore,
                 Some("comment_outside_channel"),
             ),
-        ];
+        ]
+    }
+
+    #[test]
+    fn cap_finding_id_ignores_line_drift_and_directive_order() {
+        let cfg = cap_config(2);
+        let nodes = over_cap_nodes();
         let original = run(&file_with(nodes.clone()), &cfg);
         assert_eq!(original.len(), 1);
 
@@ -184,7 +203,7 @@ mod tests {
         for node in &mut drifted {
             node.line += 40;
         }
-        let mut reordered = nodes.clone();
+        let mut reordered = nodes;
         reordered.reverse();
 
         for (label, variant) in [("line drift", drifted), ("reordering", reordered)] {
@@ -195,6 +214,14 @@ mod tests {
                 "the file-scoped id must survive {label}"
             );
         }
+    }
+
+    #[test]
+    fn cap_finding_id_changes_when_a_directive_is_rescoped_or_added() {
+        let cfg = cap_config(2);
+        let nodes = over_cap_nodes();
+        let original = run(&file_with(nodes.clone()), &cfg);
+        assert_eq!(original.len(), 1);
 
         let mut rescoped = nodes.clone();
         rescoped[2].directive.as_mut().expect("directive").check = Some("missing_header".into());
