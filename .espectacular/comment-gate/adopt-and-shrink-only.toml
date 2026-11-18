@@ -1,9 +1,9 @@
 id = "adopt-and-shrink-only"
-description = "The baseline suppresses grandfathered IDs and the fixed tree passes; re-adopting a superset baseline fails the run."
+description = "The adopted baseline suppresses grandfathered IDs and the fixed tree passes; re-adopting a superset baseline fails the run."
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
 cargo = [{flags = "adopt_writes_the_baseline_contract_and_exits_zero_with_findings"}, {flags = "adopted_findings_are_suppressed_by_the_next_plain_run"}, {flags = "fixing_prose_passes_without_rewriting_and_re_adoption_shrinks"}, {flags = "a_superset_baseline_is_rejected_as_growth"}]

@@ -3,7 +3,7 @@ description = "Only the file whose governing commit carries an Assisted-by trail
 archetype = "PF"
 status = "active"
 superseded_by = ""
-authored_with = "0.12.2"
+authored_with = "0.12.3"
 
 [tests]
 cargo = [{flags = "default_mode_skips_untouched_legacy_files"}, {flags = "scope_uses_commit_attribution"}]
