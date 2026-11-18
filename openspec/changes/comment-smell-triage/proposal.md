@@ -3,8 +3,8 @@
 ## WHY
 
 The field investigation over 48 charly-vibes repos (3,873 files, 58,781
-findings) shows the gate currently enforces comment placement, not code
-quality:
+findings; `evidence.md`) shows the gate currently enforces comment
+placement, not code quality:
 
 - 42.5% of findings are in tests; 19.0% sit inside each file's leading
   comment block; 24.7% is mechanical noise (banners, shebangs, generated
@@ -13,7 +13,7 @@ quality:
   workaround/apology 26 (0.04%).
 - Every inspected `commented_out_code` finding (14/14) was a banner, a
   math formula, or an expected-value annotation — zero dead code.
-- 40% of `doc_summary_cap_exceeded` findings are single-sentence
+- 39.6% of `doc_summary_cap_exceeded` findings are single-sentence
   summaries that wrap across source lines; 6/8 external evidence sources
   contradict a line-based cap.
 
@@ -25,50 +25,56 @@ documented one.
 
 ## What Changes
 
-- **Findings name the smell.** Every finding gains `smell` and `severity`.
-  Error smells: `narration` (conservative, code-restating), `apology`
-  (for now/temporary/workaround/hack), `todo` (unresolvable TODO/FIXME),
-  `commented_out_code`. Warning smells: `banner`, `doc_cap`,
-  `unclassified` prose.
+- **Severity for every finding.** Findings carry `severity: error|warning`.
+  `smell` names the prose smell and is `null` for structural findings
+  (`missing_header`, `unresolvable_marker`, `suppression_cap_exceeded`).
+  Error smells: `narration`, `apology`, `todo`, plus those structural
+  findings. Warning: `banner`, `unclassified`, `doc_cap`, and
+  `commented_out_code` until its precision ticket (`sad-jdw`) promotes it.
 - **The verdict blocks on errors only.** `ok` and the exit status derive
-  from new error-severity findings; warnings are reported and counted in
-  `stats.findings_blocking`/`stats.findings` but do not fail the run.
-- **Rationale becomes a channel.** Leading tags `SAFETY:`, `INVARIANT:`,
-  `SECURITY:` are a structural rationale channel, counted in
-  `stats.comments_rationale`, so required invariants stop being debt.
+  from new error-severity findings; warnings are counted but do not fail.
+  `--strict` restores any-new-finding failure for teams that want it.
+- **Rationale becomes a channel.** Leading `SAFETY:`, `INVARIANT:`,
+  `SECURITY:`, and `WHY:` tags with a body are counted rationale, not
+  debt. `NOTE:` stays prose.
 - **Doc cap counts sentences, not rendered lines.** One sentence passes
   however it wraps; a multi-sentence lead is a warning.
 - **Remediation names dispositions, not deletion.** Per smell kind the
-  hardcoded remediation offers rename/extract, move to header/doc, cite a
-  marker, add a test, or (banners only) delete.
+  remediation offers rename/extract, move to a channel, tag as rationale,
+  cite a marker, add a test, or (banners only) delete.
 - **Enforcement is the baseline delta.** A repo adopts once; only new
-  ids block. Without a baseline the run is an inventory of the tree.
-- **Block findings whose body is a separator are banner warnings**, so
-  the existing precision gap does not turn banners into errors.
+  ids block. Without a baseline the run is a full inventory.
+- **Block findings are warning-severity** until precision is fixed;
+  separator bodies are `banner` regardless of the check id.
 
 ## Impact
 
-- Spec: `openspec/specs/comment-gate/spec.md` gains two requirements
-  (smell/severity, baseline-delta enforcement) and modifies four
-  (channel attribution, prose outside channels, doc summary cap, output
-  contract).
-- Code: `sad/src/model.rs`, `checks/outside_channel.rs`, `checks/doc_cap.rs`,
-  `checks/mod.rs`, `checks/commented_out_code.rs`, `attribution.rs`,
-  `check.rs`, `envelope.rs`, `render.rs`, `config.rs`.
-- Output: additive `smell`, `severity`, `stats.findings_blocking`,
-  `stats.comments_rationale`; `ok`/exit semantics change (0.2.0).
-- Tests: every contract touching prose, doc cap, verdict, text mode.
-- Docs: `docs/src/gate-model.md` (classification table, dispositions,
-  verdict), `CHANGELOG.md`, config table (`doc_summary_cap` sentences).
+- Spec: `openspec/specs/comment-gate/spec.md` gains four requirements
+  (severity, smell classification, baseline-delta enforcement, strict
+  mode) and modifies five (channel attribution, prose outside channels,
+  doc summary cap, output contract, suppression debt).
+- Code: `sad/src/model.rs`, `checks/smell.rs` (new shared classifier),
+  `checks/outside_channel.rs`, `checks/doc_cap.rs`, `checks/mod.rs`,
+  `checks/commented_out_code.rs`, `attribution.rs`, `check.rs`,
+  `envelope.rs`, `render.rs`, `cli.rs`, `config.rs`.
+- Output: additive `smell` (nullable), `severity`,
+  `stats.findings_blocking`, `stats.comments_rationale`; `--strict`;
+  `ok`/exit semantics change (0.2.0).
+- Tests: every contract touching prose, doc cap, verdict, text mode,
+  suppression.
+- Docs: `docs/src/gate-model.md` (severity table, algorithms,
+  dispositions, verdict), `CHANGELOG.md`, config table
+  (`doc_summary_cap` sentences).
 - Ticket: `sad-66v` (feature, needs-spec-change).
 
 ## Dependencies (not bundled)
 
-- `sad-h3i` shebang/PEP 263 false positives: currently 245 error-class
-  prose findings; must land before the diff gate is enabled fleet-wide.
-- `sad-8ah` gitignore/generated-path off-ramp: 1,985 findings in
-  `_book/` and `.claude/worktrees`.
-- `sad-6z5` non-SPDX licence headers.
+- `sad-jdw` block-check precision: this change ships the check as a
+  warning; the ticket is the prerequisite for restoring error severity.
+- `sad-h3i` shebang/PEP 263 false positives, `sad-8ah` gitignore and
+  generated-path off-ramp, `sad-6z5` non-SPDX licence headers: they are
+  warning noise under the new classifier, not blockers. Land them to keep
+  warning volume honest.
 - A later `ddl` change for complexity escalation (see Out of scope).
 
 ## Out of scope
@@ -79,7 +85,6 @@ documented one.
 - Reading pretender metrics from sad. Complexity escalation is an
   orchestrator rule in `ddl`: a `narration` warning may become blocking
   when a structure gate flags the same unit. The boundary stays intact.
-- Remediation-outcome telemetry (comment-only vs code-changing fixes);
-  follow-up change, needed to prove the quality claim.
-- Fixing the remaining noise classes inline; they keep their own
-  tickets and spec changes.
+- Remediation-outcome telemetry; the follow-up change measures
+  comment-only vs code-changing fixes and the quality outcome.
+- Fixing the noise tickets inline; they keep their own changes.
