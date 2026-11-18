@@ -36,17 +36,16 @@ impl IgnoreStack {
     ///
     /// Filtering applies only inside a git work tree: `.git` must exist, as a
     /// directory or as the file a linked worktree or submodule carries. Its
-    /// contents are never read. A root `.gitignore` that exists but cannot be
-    /// read as UTF-8 disables filtering entirely — the exact pre-change walk —
-    /// while a missing one simply contributes no root rules.
+    /// contents are never read. A missing, unreadable, or non-UTF-8 root
+    /// `.gitignore` contributes no root rules — the walk then applies only
+    /// deeper ignore files, exactly as the spec states.
     pub(super) fn detect(repo: &Path) -> Option<Self> {
         if !repo.join(".git").exists() {
             return None;
         }
         let roots = match load(&repo.join(".gitignore")) {
             Loaded::Rules(rules) => rules,
-            Loaded::Absent => Vec::new(),
-            Loaded::Broken => return None,
+            Loaded::Absent | Loaded::Broken => Vec::new(),
         };
         Some(Self {
             total: roots.len(),

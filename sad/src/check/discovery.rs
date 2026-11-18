@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn broken_root_ignore_file_degrades_to_the_plain_walk() {
+    fn broken_root_ignore_file_adds_no_rules() {
         let root = temp_root("sad-check-broken");
         fs::create_dir_all(root.join(".git")).expect("work-tree marker is created");
         generated_tree(&root, "generated/\n");
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(
             discover_files(&root).files,
             vec!["generated/api.rs".to_string()],
-            "an unreadable root ignore file disables filtering entirely"
+            "the broken root file adds no rules, so the walk is the plain walk"
         );
         let _ = fs::remove_dir_all(&root);
     }

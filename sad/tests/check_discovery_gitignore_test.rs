@@ -72,6 +72,27 @@ fn gitignored_sources_are_not_gated() {
     );
 }
 
+// see sad-o41: a broken (non-UTF-8) root ignore file adds no rules; nested rules stay in force.
+#[test]
+fn broken_root_ignore_file_adds_no_rules_but_nested_files_still_apply() {
+    let repo = work_tree("gitignore-broken-root");
+    repo.write_bytes(".gitignore", &[0xff, 0xfe, b'\n']);
+    repo.write("src/generated/api.ts", PROSE_SOURCE);
+    repo.write("src/generated/.gitignore", "api.ts\n");
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+
+    assert_eq!(
+        code, 0,
+        "the nested rule hides the only source, so the run passes: {envelope}"
+    );
+    assert_eq!(
+        stats(&envelope)["files_discovered"],
+        0usize,
+        "the broken root adds no rules while the nested rule still applies: {envelope}"
+    );
+}
+
 #[test]
 fn not_gated_source_in_non_ignored_path_stays_gated() {
     let repo = work_tree("gitignore-nonmatching");
