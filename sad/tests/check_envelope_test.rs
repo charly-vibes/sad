@@ -237,3 +237,133 @@ fn text_mode_names_the_attribution_scope_when_nothing_is_selected() {
         "a genuine clean run carries no scope hint: {clean_stdout}"
     );
 }
+
+#[test]
+fn skipped_sources_are_named_in_the_envelope_and_the_text() {
+    // see sad-o40
+    let repo = TempRepo::new("skipped-sources");
+    repo.write("src/clean.rs", "fn clean() {}\n");
+    repo.write_bytes("src/latin1.rs", b"// \xe9t\xe9\nfn latin() {}\n");
+    repo.write_bytes("src/invalid.rs", b"// \xff\xfe broken\nfn broken() {}\n");
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 0, "skips alone must not fail the run: {envelope}");
+    assert_eq!(envelope["ok"], true);
+    assert!(
+        reported_findings(&envelope).is_empty(),
+        "unreadable content yields no findings: {envelope}"
+    );
+    assert_eq!(
+        envelope["data"]["stats"]["files_skipped"], 2usize,
+        "both undecodable files are counted: {envelope}"
+    );
+
+    let warnings = envelope["warnings"]
+        .as_array()
+        .expect("the envelope carries a warnings array");
+    let mut skipped: Vec<(&str, &str)> = warnings
+        .iter()
+        .filter(|warning| warning["rule_name"] == "unreadable_source")
+        .map(|warning| {
+            (
+                warning["entity_id"]
+                    .as_str()
+                    .expect("a skipped warning names its path"),
+                warning["message"]
+                    .as_str()
+                    .expect("a skipped warning carries a message"),
+            )
+        })
+        .collect();
+    skipped.sort();
+    assert_eq!(
+        skipped.iter().map(|(path, _)| *path).collect::<Vec<&str>>(),
+        vec!["src/invalid.rs", "src/latin1.rs"],
+        "each skipped file is named exactly once: {envelope}"
+    );
+    for (path, message) in &skipped {
+        assert!(
+            message.contains("not valid UTF-8"),
+            "`{path}` must carry the stable reason: {message}"
+        );
+    }
+
+    let text = run_sad(repo.path(), &["check", "--all"]);
+    assert_eq!(text.status.code(), Some(0));
+    let stdout = String::from_utf8(text.stdout).expect("text stdout is UTF-8");
+    assert_eq!(
+        stdout.trim_end().lines().count(),
+        1,
+        "the skipped suffix stays on the one-line contract: {stdout}"
+    );
+    assert!(
+        stdout.contains("pass: 0 findings in 1 file"),
+        "the analysed count is unchanged: {stdout}"
+    );
+    assert!(
+        stdout.contains("skipped 2 files"),
+        "text mode counts skipped sources: {stdout}"
+    );
+    assert!(
+        stdout.contains("src/invalid.rs (not valid UTF-8)")
+            && stdout.contains("src/latin1.rs (not valid UTF-8)"),
+        "text mode names every path with its reason: {stdout}"
+    );
+}
+
+#[test]
+fn readable_runs_carry_no_skip_signal() {
+    let repo = TempRepo::new("readable-only");
+    repo.write("src/clean.rs", "fn clean() {}\n");
+
+    let (_, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(envelope["data"]["stats"]["files_skipped"], 0usize);
+    let warnings = envelope["warnings"]
+        .as_array()
+        .expect("the envelope carries a warnings array");
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| warning["rule_name"] != "unreadable_source"),
+        "a readable run emits no skip warning: {envelope}"
+    );
+
+    let text = run_sad(repo.path(), &["check", "--all"]);
+    let stdout = String::from_utf8(text.stdout).expect("text stdout is UTF-8");
+    assert!(
+        !stdout.contains("skipped"),
+        "a readable run keeps the bare one-liner: {stdout}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn unreadable_permissions_are_named() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo = TempRepo::new("unreadable-permissions");
+    repo.write("src/blocked.rs", "fn blocked() {}\n");
+    let blocked = repo.path().join("src/blocked.rs");
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000))
+        .expect("the fixture permissions are set");
+    if std::fs::read_to_string(&blocked).is_ok() {
+        return;
+    }
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+    assert_eq!(code, 0);
+    assert_eq!(envelope["data"]["stats"]["files_skipped"], 1usize);
+    let warning = envelope["warnings"]
+        .as_array()
+        .expect("the envelope carries a warnings array")
+        .iter()
+        .find(|warning| warning["rule_name"] == "unreadable_source")
+        .unwrap_or_else(|| panic!("an unreadable file is named: {envelope}"));
+    assert_eq!(warning["entity_id"], "src/blocked.rs");
+    assert!(
+        warning["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("permission denied")),
+        "the reason is stable: {warning}"
+    );
+}

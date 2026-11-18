@@ -1,0 +1,9 @@
+id = "undecodable-sources-are-named"
+description = "Latin-1 and invalid-UTF-8 sources are counted as skipped and named by unreadable_source warnings with no findings."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "skipped_sources_are_named_in_the_envelope_and_the_text"}]

@@ -1,0 +1,9 @@
+id = "unreadable-permissions-are-named"
+description = "A source that cannot be opened is counted as skipped and named with reason permission denied."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "unreadable_permissions_are_named"}]

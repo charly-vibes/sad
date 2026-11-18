@@ -62,6 +62,16 @@ impl TempRepo {
             .unwrap_or_else(|err| panic!("{} must be writable: {err}", destination.display()));
     }
 
+    /// Write raw bytes, so a fixture can be deliberately invalid UTF-8.
+    pub fn write_bytes(&self, rel: &str, contents: &[u8]) {
+        let destination = self.0.join(rel);
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent).expect("parent directory is created");
+        }
+        std::fs::write(&destination, contents)
+            .unwrap_or_else(|err| panic!("{} must be writable: {err}", destination.display()));
+    }
+
     pub fn write_beads_ledger(&self, id: &str) {
         self.write(".beads/issues.jsonl", &format!("{{\"id\":\"{id}\"}}\n"));
     }

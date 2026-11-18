@@ -1,0 +1,9 @@
+id = "text-mode-names-skipped-sources-instead-of-a-bare-pass"
+description = "Text mode names every skipped path with its reason and the skipped count on its single line."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "skipped_sources_are_named_in_the_envelope_and_the_text"}]

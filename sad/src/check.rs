@@ -3,7 +3,8 @@
 //! baseline split, and the stats and suppression-debt the envelope reports.
 //! Responsibilities: collect supported source files deterministically, apply
 //! `exclude` globs and commit-attribution scope, report what discovery,
-//! exclusion, and extraction dropped through the stats coverage counters,
+//! exclusion, and extraction dropped through the stats coverage counters and
+//! one `unreadable_source` warning per selected file that could not be read,
 //! build the marker resolver context lazily from the enabled resolver sources
 //! (beads ledger, openspec specs), run each check on non-exempt files, order
 //! findings by path, line, and check id, then load `sad-baseline.json` to
@@ -12,9 +13,10 @@
 //! Rationale: the envelope is only trustworthy if its inputs are reproducible,
 //! so discovery is a pure tree walk with no clock, network, or parallelism and
 //! every collection is sorted before it reaches the report. Unreadable files
-//! and directories are skipped deterministically (the gate reports on what it
-//! can parse; an I/O failure is not a documentation finding and must not make
-//! the same tree produce different results on different machines).
+//! are skipped deterministically and named by path and reason, so a passing
+//! run never hides a source it could not judge; an I/O failure is not a
+//! documentation finding, and the gate reports on what it can parse without
+//! letting the machine's I/O state change the findings.
 //!
 //! Stages: [`select_files`] (discover, exclude, scope) → [`analyze_files`]
 //! (extraction) → [`collect_debt`] and [`collect_findings`] (checks) →
@@ -66,7 +68,7 @@ pub fn run(repo: &Path, cfg: &Config, all: bool, adopt: bool) -> Result<CheckRep
     let files = FileCounts {
         discovered: selection.discovered,
         selected: selection.selected.len(),
-        skipped,
+        skipped: skipped.len(),
         excluded: selection.excluded,
         attributed: selection.attributed,
         without_commit: selection.without_commit,
@@ -74,11 +76,13 @@ pub fn run(repo: &Path, cfg: &Config, all: bool, adopt: bool) -> Result<CheckRep
         unsupported: selection.unsupported.len(),
     };
     let stats = CheckStats::of(&analyzed, &debt, &findings, files);
+    let mut warnings = unsupported_warnings(&selection.unsupported);
+    warnings.extend(skipped_warnings(&skipped));
     let report = CheckReport {
         findings,
         suppression_debt: debt,
         stats,
-        warnings: unsupported_warnings(&selection.unsupported),
+        warnings,
     };
     apply_baseline(repo, report, adopt)
 }
@@ -143,25 +147,81 @@ fn unsupported_warnings(paths: &[String]) -> Vec<Warning> {
         .collect()
 }
 
-/// Extract every selected file; unreadable or non-UTF-8 sources are skipped
-/// rather than invented as findings or allowed to let the machine's I/O state
-/// change the report silently — the skip count is reported in `stats`.
+/// One selected source file the run could not read as UTF-8.
+///
+/// The reason is a short stable phrase so the envelope and the text render
+/// say the same thing on every machine; an unusual I/O error keeps the
+/// operating-system message instead of being flattened to "unreadable".
+struct SkippedSource {
+    path: String,
+    reason: String,
+}
+
+/// Extract every selected file and collect the ones that could not be read.
+///
+/// Unreadable or non-UTF-8 sources are skipped rather than invented as
+/// findings. Each skip is returned with its path and reason so the run can
+/// report it, and `stats.files_skipped` counts them.
 ///
 /// One [`extract::Analyzer`] (compiled marker matcher plus one parser per
 /// language) is reused across files, so the run compiles the marker pattern
 /// and grammar setup once instead of per file.
-fn analyze_files(repo: &Path, selected: &[String], cfg: &Config) -> (Vec<AnalyzedFile>, usize) {
+fn analyze_files(
+    repo: &Path,
+    selected: &[String],
+    cfg: &Config,
+) -> (Vec<AnalyzedFile>, Vec<SkippedSource>) {
     let mut analyzer = extract::Analyzer::new(cfg);
     let mut analyzed: Vec<AnalyzedFile> = Vec::new();
-    let mut skipped = 0;
+    let mut skipped: Vec<SkippedSource> = Vec::new();
     for rel_path in selected {
-        let Ok(source) = fs::read_to_string(repo.join(rel_path)) else {
-            skipped += 1;
-            continue;
+        let source = match fs::read_to_string(repo.join(rel_path)) {
+            Ok(source) => source,
+            Err(error) => {
+                skipped.push(SkippedSource {
+                    path: rel_path.clone(),
+                    reason: skip_reason(&error),
+                });
+                continue;
+            }
         };
         analyzed.push(analyzer.analyze(Path::new(rel_path), rel_path, &source, cfg));
     }
     (analyzed, skipped)
+}
+
+/// Stable reason phrase for a read failure.
+///
+/// `InvalidData` is what `read_to_string` reports for non-UTF-8 bytes, which
+/// covers latin-1, UTF-16, and corrupted sources; the common permission and
+/// disappearance cases get their own phrase. Anything else keeps the OS
+/// message so an unexpected failure is still diagnosable.
+fn skip_reason(error: &std::io::Error) -> String {
+    match error.kind() {
+        std::io::ErrorKind::InvalidData => "not valid UTF-8".to_string(),
+        std::io::ErrorKind::PermissionDenied => "permission denied".to_string(),
+        std::io::ErrorKind::NotFound => "file disappeared during the run".to_string(),
+        _ => format!("unreadable ({error})"),
+    }
+}
+
+/// One envelope warning per skipped selected file, naming its path and reason.
+///
+/// The warning channel matches `unsupported_extension`: JSON consumers get a
+/// per-path record, and the text render reads the same warnings.
+fn skipped_warnings(skipped: &[SkippedSource]) -> Vec<Warning> {
+    skipped
+        .iter()
+        .map(|source| Warning {
+            rule_name: "unreadable_source".to_string(),
+            entity_id: Some(source.path.clone()),
+            message: source.reason.clone(),
+            suggested_remediation: Some(
+                "Make the source readable as UTF-8; the gate never guesses an encoding."
+                    .to_string(),
+            ),
+        })
+        .collect()
 }
 
 /// Suppression-debt entries from every analysed file, whole-file exempt ones

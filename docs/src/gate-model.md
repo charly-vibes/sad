@@ -212,6 +212,15 @@ named by one `unsupported_extension` envelope warning each, never dropped
 silently; JSX/TSX parsing is a separate decision. Rust ships first so sad
 gates itself.
 
+Selected sources that cannot be read as UTF-8 are counted in
+`files_skipped` and named by one `unreadable_source` envelope warning each,
+carrying the path and a stable reason (`not valid UTF-8`, `permission
+denied`, `file disappeared during the run`, or the operating-system error
+for anything else). The gate never guesses an encoding and invents no
+findings for skipped content; the warnings keep the skip visible but do
+not by themselves fail the run. Text mode appends the same paths and
+reasons, so a passing line never hides a source it did not judge.
+
 ## Boundary
 
 [pretender](https://github.com/charly-vibes/pretender) gates structure

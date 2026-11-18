@@ -325,3 +325,20 @@ fn unsupported_adjacent_extensions_are_named_in_warnings() {
         "the message states the boundary: {envelope}"
     );
 }
+
+#[test]
+fn undecodable_sources_count_as_skipped_not_analyzed() {
+    let repo = TempRepo::new("stats-skipped");
+    repo.write("src/clean.rs", "fn clean() {}\n");
+    repo.write_bytes("src/latin1.rs", b"// \xe9\nfn latin() {}\n");
+    repo.write_bytes("src/invalid.rs", b"// \xff\xfe\nfn broken() {}\n");
+
+    let (code, envelope) = run_json(repo.path(), &["check", "--all", "--json"]);
+    let stats = &envelope["data"]["stats"];
+
+    assert_eq!(code, 0, "{envelope}");
+    assert_eq!(stats["files_discovered"], 3usize, "{stats}");
+    assert_eq!(stats["files_selected"], 3usize, "{stats}");
+    assert_eq!(stats["files_analyzed"], 1usize, "{stats}");
+    assert_eq!(stats["files_skipped"], 2usize, "{stats}");
+}

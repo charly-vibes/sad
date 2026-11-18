@@ -1,0 +1,9 @@
+id = "a-fully-readable-run-is-unchanged"
+description = "A fully readable run emits no unreadable_source warning and keeps the bare text one-liner."
+archetype = "PF"
+status = "active"
+superseded_by = ""
+authored_with = "0.12.3"
+
+[tests]
+cargo = [{flags = "readable_runs_carry_no_skip_signal"}]

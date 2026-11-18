@@ -3,14 +3,14 @@
 //! Responsibilities: parse arguments (global `--json`), route subcommands
 //! (`version`, `check`), resolve `sad.toml` for `check`, drive the check
 //! pipeline over the working directory, map config and baseline gate errors
-//! to envelope errors, and render text mode.
+//! to envelope errors, and expose text mode from [`crate::render`].
 //! Rationale: the envelope is the *single* output format for all CLI commands
 //! (callers check `ok` first); Invariant 3.2.5 forbids emitting an error
 //! without non-empty remediation, so every error path carries a fix hint.
 //! The tool is a deterministic gate: no network, no models, no randomness —
 //! same input tree, same findings. Text mode also explains an empty
-//! attribution scope, so a green gate that gated nothing never reads like a
-//! clean tree.
+//! attribution scope and every source the run could not read, so a green gate
+//! that gated nothing never reads like a clean tree.
 
 use std::path::{Path, PathBuf};
 
@@ -282,88 +282,7 @@ pub fn argument_error_envelope(err: &clap::Error) -> String {
     .expect("envelope serialization cannot fail")
 }
 
-/// Render an envelope JSON string as a short human-readable line.
-///
-/// Text mode is a convenience rendering of the same envelope — never a
-/// second output format with different content.
-pub fn render_text(json: &str) -> String {
-    let v: serde_json::Value = serde_json::from_str(json).expect("run() always emits valid JSON");
-    if v["envelope_kind"] == "check" {
-        return check_text(&v);
-    }
-    if v["ok"].as_bool().unwrap_or(false) {
-        let name = v["data"]["name"].as_str().unwrap_or("sad");
-        let version = v["data"]["version"].as_str().unwrap_or("?");
-        let status = v["data"]["status"].as_str().unwrap_or("ok");
-        format!("{name} {version} — {status}\n")
-    } else {
-        format!(
-            "error: {}\n",
-            v["data"]["message"].as_str().unwrap_or("unknown error")
-        )
-    }
-}
-
-/// One-line check summary: the verdict, the new-finding and analysed-file
-/// counts, and the first finding as `path:line check_id` with its remediation
-/// command when the envelope carries one — the actionable part of the JSON.
-fn check_text(v: &serde_json::Value) -> String {
-    let stats = &v["data"]["stats"];
-    let findings = stats["findings"].as_u64().unwrap_or(0);
-    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
-    let verdict = if v["ok"].as_bool().unwrap_or(false) {
-        "pass"
-    } else {
-        "fail"
-    };
-    let mut line = format!(
-        "sad check — {verdict}: {findings} {} in {files} {}",
-        plural(findings, "finding"),
-        plural(files, "file"),
-    );
-    if let Some(brief) = first_finding_brief(&v["data"]["findings"]) {
-        line.push_str("; ");
-        line.push_str(&brief);
-    }
-    let selected = stats["files_selected"].as_u64().unwrap_or(files);
-    let unattributed = stats["files_unattributed"].as_u64().unwrap_or(0);
-    if selected == 0 && unattributed > 0 {
-        line.push_str(&format!(
-            "; attribution scope excluded {} {}: commit with the configured trailer or run \
-             `sad check --all`",
-            unattributed,
-            plural(unattributed, "file"),
-        ));
-    }
-    line.push('\n');
-    line
-}
-
-/// `count` copies of `noun`, pluralised by appending `s`.
-fn plural(count: u64, noun: &str) -> String {
-    if count == 1 {
-        noun.to_string()
-    } else {
-        format!("{noun}s")
-    }
-}
-
-/// The first reported finding as `path:line check_id`, followed by its
-/// remediation command when present; `None` when there is no finding to name.
-fn first_finding_brief(findings: &serde_json::Value) -> Option<String> {
-    let finding = findings.as_array()?.first()?;
-    let path = finding["path"].as_str()?;
-    let line = finding["line"].as_u64()?;
-    let check = finding["check"].as_str()?;
-    let mut brief = format!("{path}:{line} {check}");
-    if let Some(command) = finding["remediation"]["command"]
-        .as_str()
-        .filter(|command| !command.is_empty())
-    {
-        brief.push_str(&format!(" (fix: {command})"));
-    }
-    Some(brief)
-}
+pub use crate::render::render_text;
 
 /// Exit status mirrors the envelope: `ok:false` is never reported as
 /// process success to machine consumers.
