@@ -31,4 +31,4 @@ the same change. The spec delta is this file's sibling
 - [x] 7. Run `cargo test --package sad`, `sad check --all`, `ah check
       --changes pyi-stub-coverage`, `openspec validate pyi-stub-coverage
       --strict`
-- [ ] 8. Close `sad-7hx` with evidence and deploy the spec delta
+- [x] 8. Close `sad-7hx` with evidence and deploy the spec delta

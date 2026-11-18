@@ -17,7 +17,12 @@ exemption, finding-eligible prose. A leading `SAFETY:`, `INVARIANT:`,
 `SECURITY:`, or `WHY:` token with a non-empty body SHALL be rationale,
 counted in `stats.comments_rationale`; `NOTE:` SHALL remain prose.
 Attribution SHALL be purely structural (node kind, position, leading
-token), never semantic.
+token), never semantic. A Python `#!` shebang on source line 1 and a PEP
+263 coding cookie — `# -*- coding: utf-8 -*-`, `# coding: utf-8`, or
+`# coding=utf-8` — on source lines 1-2 SHALL be attribution-class
+exemption: exempt-but-observable like an SPDX tag, counted by the
+exemption summary, and never finding-eligible prose. The same text on a
+later source line SHALL remain finding-eligible prose.
 
 #### Scenario: Rust file with one node per class
 
@@ -47,6 +52,29 @@ token), never semantic.
   on an exported symbol, module docstring)
 - **THEN** attribution produces the same class assignment pattern as the
   Rust fixture
+
+#### Scenario: Python shebang and coding cookie are file metadata
+
+- **WHEN** a Python file's first line is `#!/usr/bin/env python3` and its
+  second line is a PEP 263 coding cookie, with no other comments
+- **THEN** both nodes are attribution-class exemption, the exemption
+  summary counts them, no `comment_outside_channel` finding is emitted,
+  and the file reports `exempt: true`
+
+#### Scenario: Shebang after the first line stays prose
+
+- **WHEN** a `#!/usr/bin/env python3` comment appears on any source line
+  after line 1
+- **THEN** it remains finding-eligible prose and emits a
+  `comment_outside_channel` finding
+
+#### Scenario: File metadata does not silence other prose
+
+- **WHEN** a Python file carries a shebang, a coding cookie, and a
+  narration comment
+- **THEN** the metadata lines stay exemption-class, the narration still
+  emits its `comment_outside_channel` finding, and the file is not
+  `exempt: true`
 
 ### Requirement: Prose outside channels is a finding
 
@@ -234,12 +262,12 @@ opt in explicitly.
 ### Requirement: Suppression debt is exempt-but-counted
 
 The system SHALL report every suppression directive (`# noqa`,
-`# type: ignore`, `// @ts-ignore`, `// eslint-disable-*`, or
-`sad:ignore <check-id> <reason>`) as a `suppression_debt` entry (file,
-line, directive, check) in the envelope instead of a prose finding for
-the directive node itself. A directive scopes to exactly one check and
-SHALL NOT withhold any other finding; an error-severity finding remains
-blocking. WHEN a `suppression_cap` is
+`# type: ignore`, `// @ts-ignore`, `// @ts-expect-error`,
+`// eslint-disable-*`, or `sad:ignore <check-id> <reason>`) as a
+`suppression_debt` entry (file, line, directive, check) in the envelope
+instead of a prose finding for the directive node itself. A directive
+scopes to exactly one check and SHALL NOT withhold any other finding; an
+error-severity finding remains blocking. WHEN a `suppression_cap` is
 configured and a single analyzed file's debt exceeds it, the system SHALL
 emit `suppression_cap_exceeded`. The default SHALL be no cap.
 
@@ -248,6 +276,15 @@ emit `suppression_cap_exceeded`. The default SHALL be no cap.
 - **WHEN** a Python line carries `# noqa`
 - **THEN** the envelope contains a `suppression_debt` entry for it and
   no `comment_outside_channel` finding
+
+#### Scenario: @ts-expect-error is suppression debt
+
+- **WHEN** a TypeScript line carries
+  `// @ts-expect-error the call is deliberately loose` and no other
+  directive
+- **THEN** the envelope contains one `suppression_debt` entry for it with
+  form `ts_expect_error` and no scoped check id, and no
+  `comment_outside_channel` finding is emitted for the directive node
 
 #### Scenario: Cap breach
 
@@ -267,7 +304,12 @@ emit `suppression_cap_exceeded`. The default SHALL be no cap.
 
 The system SHALL exempt licence/SPDX header blocks, `@generated` marker
 regions, and paths matching `sad.toml` exclude globs from findings, and
-SHALL report exemption counts in the envelope.
+SHALL report exemption counts in the envelope. Licence text beside an SPDX
+tag SHALL count as part of the licence header block when a comment body
+opens with a bounded licence marker: `Copyright` followed by a four-digit
+year, `(c)`, or `©`; a leading `©` or `(c)`; `Licensed under`; `License:`;
+or `All rights reserved`. Licence words without such a marker SHALL remain
+finding-eligible prose.
 
 #### Scenario: Generated file excluded
 
@@ -281,6 +323,22 @@ SHALL report exemption counts in the envelope.
 - **WHEN** `sad.toml` excludes `vendor/**` and a vendored file contains
   narration comments
 - **THEN** no findings are emitted for that path
+
+#### Scenario: Copyright line beside SPDX is licence text
+
+- **WHEN** a file's leading comments are
+  `// SPDX-License-Identifier: MIT` followed by
+  `// Copyright 2026 Charly Vibes`
+- **THEN** both nodes are attribution-class exemption, the exemption
+  summary counts them, no `comment_outside_channel` finding is emitted,
+  and the file reports exempt
+
+#### Scenario: Licence words without a marker stay prose
+
+- **WHEN** a comment reads `// Copyright is a legal concept, not a licence
+  header` or `// License negotiation happens elsewhere`
+- **THEN** it remains finding-eligible prose and emits a
+  `comment_outside_channel` finding
 
 ### Requirement: Agent-attribution scoping
 
@@ -321,12 +379,13 @@ only from explicit markers, never inferred from git heuristics.
 
 The system SHALL support Rust, Python, TypeScript, and JavaScript via
 pinned tree-sitter grammars (pretender's known-good pins) in v1. The
-supported extension set SHALL be exactly `.rs`, `.py`, `.ts`, `.js`, and
-`.mjs`; JavaScript files SHALL be parsed with the TypeScript frontend.
-Adjacent extensions the gate cannot parse (`.tsx`, `.mts`, `.cts`, `.jsx`)
-SHALL be discovered, skipped, counted in `files_unsupported`, and reported
-as envelope warnings naming each path, never dropped silently. The set and
-its exclusions SHALL be documented in `docs/src/gate-model.md`.
+supported extension set SHALL be exactly `.rs`, `.py`, `.pyi`, `.ts`, `.js`,
+and `.mjs`; `.pyi` stub files SHALL be parsed with the Python frontend, and
+JavaScript files SHALL be parsed with the TypeScript frontend. Adjacent
+extensions the gate cannot parse (`.tsx`, `.mts`, `.cts`, `.jsx`) SHALL be
+discovered, skipped, counted in `files_unsupported`, and reported as envelope
+warnings naming each path, never dropped silently. The set and its exclusions
+SHALL be documented in `docs/src/gate-model.md`.
 
 #### Scenario: Per-language fixture conformance
 
@@ -345,6 +404,18 @@ its exclusions SHALL be documented in `docs/src/gate-model.md`.
 - **WHEN** a tree contains `.tsx`, `.mts`, `.cts`, and `.jsx` sources
 - **THEN** each is counted in `files_unsupported` and named by one
   `unsupported_extension` envelope warning, and none produces findings
+
+#### Scenario: Stub sources are discovered
+
+- **WHEN** a tree contains a `.pyi` stub
+- **THEN** discovery reports it as a supported source file and never counts
+  it in `files_unsupported`
+
+#### Scenario: Stub sources are analyzed as Python
+
+- **WHEN** a `.pyi` stub is analyzed
+- **THEN** it is parsed with the Python frontend and its docstrings and
+  prose yield the same findings as the equivalent `.py` source
 
 ### Requirement: Output contract mirrors pretender
 
@@ -396,12 +467,16 @@ shrink-only adoption SHALL be unchanged.
 
 One `commented_out_code` finding SHALL cover each maximal run of
 adjacent finding-eligible prose nodes whose normalized body parses as a
-syntactic unit. It SHALL anchor at the run's first node, hash the
-normalized block body as `<path>::<symbol-path>::<content-hash>`, and
-carry the hardcoded `git log -p --follow <path>` remediation (delete;
-recover from VCS). A directive scoped to `commented_out_code` is
-ordinary suppression debt, never prose. The check SHALL fail closed to
-prose and default on.
+syntactic unit. A normalized body with no alphanumeric character SHALL
+NOT enter the class. The parse root SHALL carry at least one child that
+is a declaration or a control statement; a root consisting only of bare
+expression-statement payloads — calls, assignments, new-expressions,
+formulas, or annotations — SHALL NOT match. It SHALL anchor at the run's
+first node, hash the normalized block body as
+`<path>::<symbol-path>::<content-hash>`, and carry the hardcoded
+`git log -p --follow <path>` remediation (delete; recover from VCS). A
+directive scoped to `commented_out_code` is ordinary suppression debt,
+never prose. The check SHALL fail closed to prose and default on.
 
 The predicate input SHALL be bounded: a normalized body within 8192 bytes
 and 512 lines SHALL be parsed as one unit, and a longer body SHALL be
@@ -469,6 +544,32 @@ chunk-boundary trade-off SHALL be documented in the check's source and in
 - **WHEN** a Rust comment reads `// fn f();`
 - **THEN** it is a prose finding, not a block finding
 
+#### Scenario: Formula and annotation shapes stay prose
+
+- **WHEN** a Rust comment reads `// E = m * c^2`, a Python comment reads
+  `# E = m * c ** 2`, and an expected-value annotation such as
+  `// x = 1;` sits beside the `assert_eq!(x, 1)` it documents
+- **THEN** none emits a `commented_out_code` finding; each stays a
+  per-node prose finding, because a root of bare expressions is not
+  code-shaped
+
+#### Scenario: Call-shaped examples stay prose
+
+- **WHEN** a plain comment reads `// e.g. g();` or `// f();`, a
+  TypeScript comment reads `// new Foo();`, and a labeled comment reads
+  `// Note: retry();`
+- **THEN** no `commented_out_code` finding is emitted; a bare call, a
+  new-expression, and a labeled statement are not declarations or
+  control statements, so each stays a per-node prose finding
+
+#### Scenario: Separator bodies never reach the block class
+
+- **WHEN** an adjacent prose run normalizes to a body with no
+  alphanumeric character, such as a `// =====` ruler or a
+  `/* ----- */` divider
+- **THEN** no `commented_out_code` finding is emitted and each node
+  stays a per-node prose finding; the body is rejected before parsing
+
 #### Scenario: Suppression id is commented_out_code
 
 - **WHEN** a matched dead block is followed by a
@@ -494,8 +595,8 @@ chunk-boundary trade-off SHALL be documented in the check's source and in
 #### Scenario: Documentation call example is a known false positive
 
 - **WHEN** a plain comment reads `// e.g. g();`
-- **THEN** one `commented_out_code` finding is emitted; only doc
-  channels are excluded, so this accepted false positive is pinned
+- **THEN** no `commented_out_code` finding is emitted; the previously
+  accepted false positive now stays prose under the call-shaped rule
 
 #### Scenario: Long prose runs are bounded
 
@@ -653,11 +754,10 @@ contract.
 
 Every released finding SHALL carry `severity`, either `error` or
 `warning`. `error` SHALL apply to narration, apology, todo,
-`missing_header`, `unresolvable_marker`, and `suppression_cap_exceeded`;
-`warning` SHALL apply to banner, unclassified, `doc_summary_cap_exceeded`,
-and `commented_out_code` until the precision change promotes the block
-finding. `smell` SHALL be null for findings not derived from comment
-prose.
+`commented_out_code`, `missing_header`, `unresolvable_marker`, and
+`suppression_cap_exceeded`; `warning` SHALL apply to banner, unclassified,
+and `doc_summary_cap_exceeded`. `smell` SHALL be null for findings not
+derived from comment prose.
 
 #### Scenario: Structural findings are errors with a null smell
 
@@ -667,9 +767,16 @@ prose.
 
 #### Scenario: Block findings are warnings until precision lands
 
+- **WHEN** the block classifier reclassifies a separator-bodied block
+  finding as a banner
+- **THEN** that finding carries `smell: banner` and `severity: warning`;
+  every matched non-banner block is an error, as the next scenario states
+
+#### Scenario: Block findings are errors
+
 - **WHEN** the block predicate matches a non-banner body
 - **THEN** the `commented_out_code` finding carries
-  `smell: commented_out_code` and `severity: warning`
+  `smell: commented_out_code` and `severity: error`
 
 #### Scenario: Doc cap is a warning
 
@@ -765,3 +872,37 @@ to count only error-severity findings.
 - **WHEN** a run reports only warning-severity findings
 - **THEN** the default run exits 0, and the same run with `--strict`
   exits 1 with `ok: false`
+
+### Requirement: Skipped source directories are observable
+
+Discovery SHALL document its skip list as build, vendor, and cache names that a source directory may use. Nested `target`, `build`, `dist`, `book`, or `out` directories at depth two or deeper SHALL each produce one `skipped_source_directory` warning naming the path; root-level matches SHALL stay silent. Text mode SHALL name each skipped directory path in its own suffix and leave skip-free runs unchanged. Skipped directories SHALL NOT be enumerated and warnings SHALL NOT change the exit status.
+
+#### Scenario: Nested skip-list directory is named
+
+- **WHEN** a tree contains `src/target/foo.rs` and `sad check --all` runs
+- **THEN** `src/target/` is skipped without analysis, `foo.rs` yields no
+  findings, and exactly one `skipped_source_directory` warning carries the
+  path `src/target/` and names the skip-list name `target`
+
+#### Scenario: Root build output stays silent
+
+- **WHEN** a tree contains `target/foo.rs` and a non-skipped source, and
+  `sad check --all` runs
+- **THEN** `target/` is skipped with no `skipped_source_directory` warning
+  and the analyzed count still covers the non-skipped source
+
+#### Scenario: Added skip names are skipped
+
+- **WHEN** a tree contains `vendor/`, `third_party/`, `.mypy_cache/`,
+  `.ruff_cache/`, `out/`, `.turbo/`, and `.svelte-kit/` directories holding
+  source files
+- **THEN** discovery traverses none of them, reports no source file from
+  them, and records no ambiguous nested directory
+
+#### Scenario: Text mode names a skipped source directory
+
+- **WHEN** a tree contains `src/target/foo.rs` and a non-skipped source, and
+  `sad check --all` runs without `--json`
+- **THEN** the one-line render appends a suffix naming every skipped
+  directory path, here `src/target/`, and keeps the analyzed count; a tree
+  without ambiguous skips renders the unchanged one-liner

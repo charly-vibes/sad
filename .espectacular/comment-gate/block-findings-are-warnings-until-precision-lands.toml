@@ -1,9 +1,9 @@
 id = "block-findings-are-warnings-until-precision-lands"
-description = "A non-banner block match yields one commented_out_code finding with smell commented_out_code and severity warning."
+description = "A separator-bodied block finding keeps smell banner and severity warning while every matched non-banner block is an error."
 archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "a_separator_commented_out_code_body_is_a_banner"}, {flags = "rust_line_comment_block_is_one_finding"}]
+cargo = [{flags = "a_separator_commented_out_code_body_is_a_banner"}]

@@ -38,7 +38,7 @@ the spec delta is this file's sibling `specs/comment-gate/spec.md`.
 - [x] 11. Run `cargo test --package sad`, `sad check --all`, `ah check
       --changes skipped-directory-visibility`, `openspec validate
       skipped-directory-visibility --strict`
-- [ ] 12. Close `sad-xkz` with evidence and deploy the spec delta
+- [x] 12. Close `sad-xkz` with evidence and deploy the spec delta
 - [x] 13. Declare the `text-mode-names-a-skipped-source-directory` contract
       (flags `nested_skip_list_directory_is_named_in_text_mode`) for the
       text-mode scenario, including the unchanged one-liner when a tree has

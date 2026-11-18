@@ -1,9 +1,9 @@
 id = "documentation-call-example-is-a-known-false-positive"
-description = "One commented_out_code finding is emitted; only doc channels are excluded, so this accepted false positive is pinned."
+description = "No commented_out_code finding is emitted; the previously accepted false positive now stays prose under the call-shaped rule."
 archetype = "PF"
 status = "active"
 superseded_by = ""
 authored_with = "0.12.3"
 
 [tests]
-cargo = [{flags = "documentation_call_example_is_a_known_false_positive"}]
+cargo = [{flags = "call_shaped_examples_stay_prose"}]

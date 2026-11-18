@@ -41,4 +41,4 @@ changes. The spec delta is this file's sibling
       `cargo test --package sad --test check_commented_out_code_predicate_test`,
       `cargo test --package sad --no-run`, and
       `openspec validate commented-out-code-precision --strict`
-- [ ] 11. Archive the change and close `sad-jdw` (orchestrator)
+- [x] 11. Archive the change and close `sad-jdw` (orchestrator)
