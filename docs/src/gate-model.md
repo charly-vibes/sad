@@ -7,13 +7,15 @@
 
 # Gate Model
 
-> **Status: specified 2026-11-17 (design resolved 2026-11-16); v0.1
+> **Status: specified 2026-11-17 (design resolved 2026-11-16); v0.2.0
 > implemented and dogfooded in this repository — pre-release, not yet on
 > crates.io.** The EARS spec is deployed at
 > [`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
 > (change archived 2026-11-18). The decision record and evidence ledger are
-> [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md).
-> This page records the v2 model.
+> [`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md);
+> the triage design and its corpus evidence live in
+> `openspec/changes/comment-smell-triage/`. This page records the v2 model
+> plus the triage pass.
 
 ## Premise
 
@@ -24,13 +26,16 @@ more expressive code, not more words.
 sad's primary audience is **LLM coding agents**, which spray narration
 ("`# This function calculates the total..."`), apology comments
 ("`// HACK: this is confusing`"), and TODO stubs to look finished. Agents
-respond to crisp mechanical rules, so sad is purist by design: anything
-outside the channels below is a finding. No semantic judgment anywhere —
-channels and counts only.
+respond to crisp mechanical rules, so sad stays purist about what it
+records: every prose node outside the channels below is still a finding,
+and the channels never become an escape hatch. Enforcement is narrower — a
+run blocks only on the baseline delta, and only a confident smell is an
+error. No semantic judgment anywhere: structural attribution plus
+deterministic smell rules, never a model.
 
 ## Legitimate prose channels
 
-Prose is allowed in exactly three places, all structurally checkable:
+Prose is allowed in exactly four places, all structurally checkable:
 
 1. **File header** — a top-of-file module doc (`//!` in Rust, module
    docstring in Python, header block comment in TypeScript). Detection is
@@ -38,14 +43,20 @@ Prose is allowed in exactly three places, all structurally checkable:
    `Responsibilities`, and `Rationale` must appear in the file's first
    block. `require_header` (see [Configuration](#configuration-sadtoml))
    gates the check; when it is on, a file missing any keyword yields
-   `missing_header`. This is the one home for "why" prose.
+   `missing_header`. This is the first home for "why" prose.
 2. **Doc channel** — every doc-comment (`///`, `/** */`) and docstring,
    regardless of visibility. The **summary lead**, the text up to the
-   first blank line, is capped at `doc_summary_cap` rendered lines (see
-   [Configuration](#configuration-sadtoml)). Everything after the first
-   blank line is uncapped:
-   Rust `# Errors` / `# Panics`, numpy `:param:`, TSDoc `@throws`. The cap
-   is what stops agents laundering inline narration into doc-strings.
+   first blank line, is capped at `doc_summary_cap` sentences (see
+   [Configuration](#configuration-sadtoml)), not rendered lines: one
+   sentence passes however many source lines it wraps. Inline code spans
+   and URLs are stripped before counting, and a boundary is `.`, `!`, or
+   `?` followed by whitespace and an uppercase character, digit, a quote,
+   or the end of the lead — so `e.g.`, `i.e.`, `etc.`, `vs.`, `cf.`,
+   `approx.`, versions like `v0.1`, and `Node.js` do not split a
+   sentence. Everything after the first blank line is uncapped and not
+   counted: Rust `# Errors` / `# Panics`, numpy `:param:`, TSDoc
+   `@throws`. The cap is what stops agents laundering inline narration
+   into doc-strings.
 3. **Traceability markers** — a comment whose leading token is the
    configured `marker_prefix` followed by an ID matching the configured
    `marker_pattern` (both in [Configuration](#configuration-sadtoml)) that
@@ -56,11 +67,26 @@ Prose is allowed in exactly three places, all structurally checkable:
    resolvable ID prefix cannot launder narration past the summary cap. An
    unresolvable ID is itself a finding — the anti-fabrication guardrail.
    Pure file lookup, no semantics.
+4. **Rationale** — a comment whose body begins with one of the closed tag
+   set `SAFETY:`, `INVARIANT:`, `SECURITY:`, or `WHY:` — uppercase, then a
+   colon, then a non-empty body. It is counted in
+   `stats.comments_rationale` and is not debt: this is the one inline home
+   for knowledge that must survive beside the code (Rust's `// SAFETY:`
+   convention is the model). `NOTE:` stays prose, because it usually
+   labels narration, and the tag set never grows without a spec change.
+   Pure leading-token test, no semantics.
 
-**Exempt-but-observable principle:** every exempt channel's numbers — header
-count, doc count, markers resolved, exemptions, suppression debt — appear
-in the envelope. An agent cannot slowly fill an exempt channel without the
-numbers moving.
+Attribution precedence is structural and fixed: **file header > doc >
+marker > rationale > suppression > exemption > prose**. So `//! SAFETY:`
+is a header, `/// WHY:` is doc, and `// see <id> SAFETY: ...` is a marker;
+only a plain comment that falls through the earlier classes can be
+rationale, and only a comment that falls through every class is
+finding-eligible prose.
+
+**Exempt-but-observable principle:** every exempt channel's numbers —
+header count, doc count, markers resolved, rationale count, exemptions,
+suppression debt — appear in the envelope. An agent cannot slowly fill an
+exempt channel without the numbers moving.
 
 ## Exemptions
 
@@ -86,17 +112,67 @@ ignore-spam with zero signal.
 |---|---|
 | `comment_outside_channel` | prose attributed to no channel |
 | `commented_out_code` | prose block whose normalised body parses as code |
-| `doc_summary_cap_exceeded` | doc summary lead over `doc_summary_cap` rendered lines |
+| `doc_summary_cap_exceeded` | doc summary lead over `doc_summary_cap` sentences |
 | `unresolvable_marker` | marker-prefixed ID that resolves to nothing |
 | `missing_header` | first block does not contain all three header keywords, when `require_header` is on |
 | `suppression_cap_exceeded` | file over `suppression_cap` suppressions, when a cap is set |
 
-`suppression_debt` is envelope data, never a finding.
+`suppression_debt` is envelope data, never a finding. Every check's
+`smell` and severity are in [Severity and smells](#severity-and-smells).
+
+## Severity and smells
+
+A comment is a diagnostic trigger, not a verdict. Every finding carries
+`severity` (`error` or `warning`), and `smell` is nullable — present only
+for findings derived from comment prose, serialized as snake_case strings
+with both fields always present.
+
+| Finding | `smell` | Severity |
+|---|---|---|
+| `comment_outside_channel` (narration, apology, todo) | that smell | `error` |
+| `comment_outside_channel` (banner, unclassified) | that smell | `warning` |
+| `commented_out_code` | `commented_out_code` | `warning` until `sad-jdw` lands precision, then `error` |
+| `doc_summary_cap_exceeded` | `doc_cap` | `warning` |
+| `missing_header` | `null` | `error` |
+| `unresolvable_marker` | `null` | `error` |
+| `suppression_cap_exceeded` | `null` | `error` |
+
+Classification is one post-pass after every check, over each **maximal
+adjacent prose run**, so a sentence split across three `//` nodes is
+judged as one unit. Every member node keeps its own ID and receives the
+run's smell and severity; narration scope covers function bodies,
+module-level statements, and class bodies. The rules are deterministic:
+
+| Smell | Rule |
+|---|---|
+| `todo` | body matches `TODO`, `FIXME`, or `XXX` as a whole word, and no resolvable marker is in the node |
+| `apology` | body matches `for now`, `temporary fix` / `temporary hack` / `temporary workaround` / `temporary shim` / `temporary patch`, `workaround`, `hack:`, `legacy shim`, or `to be removed`, and no resolvable marker is in the node; bare `temporary` or `hack` is not enough |
+| `narration` | the run shares at least two distinctive tokens with the next non-comment statement in the same scope, or starts with a sequencer and names the next call (see below) |
+| `banner` | body has no alphanumerics, or is a run of three or more repeated separator characters; applies to `commented_out_code` bodies too |
+| `unclassified` | prose matching none of the above |
+
+**Narration.** Take the run and the first non-empty, non-comment source
+line after it in the same scope. Tokenize both lowercased, keeping
+identifiers and literals of length at least 4 and dropping a fixed
+English/stopword/keyword list (`this`, `that`, `with`, `from`, `then`,
+`when`, `where`, `which`, `will`, `have`, `into`, `over`, `under`,
+`about`, `after`, `before`, `these`, `those`, `their`, `there`,
+`function`, `value`, `return`, `create`, `make`, `call`, `line`, plus
+language keywords). Tokens match by prefix, so `parse` meets
+`parse_config`. The run is narration when at least two distinct comment
+tokens appear in that next statement, or when the run starts with
+`now`, `then`, `first`, `next`, or `finally` and the statement contains a
+call or identifier named in the run. With no next statement, or no scope,
+the run is `unclassified`.
+
+**Ambiguity yields `unclassified`** — a warning. The classifier is biased
+to false negatives: false-positive errors are not acceptable, so only a
+confident smell blocks.
 
 ## Commented-out code
 
 `commented_out_code` is a finding kind beside `comment_outside_channel`,
-never a seventh attribution class: every node keeps its channel. A
+never an attribution class of its own: every node keeps its channel. A
 **block** is a maximal run of finding-eligible prose nodes with no row
 gap (`next.line <= prev.line + prev.text.lines().count()`); same-row
 nodes join and any other node — code, blank separator, doc, header,
@@ -104,7 +180,10 @@ marker, or suppression directive — splits. The block body is normalised
 in a fixed order (line endings and BOM, per-kind marker and gutter
 stripping, the newline join, common-prefix dedent, trailing-whitespace
 and blank-end trim) and hashed as `path::symbol-path::content-hash`
-with the anchor at the run's first node. One block is one finding.
+with the anchor at the run's first node. One block is one finding,
+carrying `smell: commented_out_code` and warning severity until `sad-jdw`
+restores precision; a separator-only body is classified `banner` even
+when the block check matched it.
 
 The predicate parses the normalised body with the same pinned frontend
 that attributed the nodes: a clean tree, non-empty root children, every
@@ -154,33 +233,62 @@ summary — a green gate that gated nothing never reads like a clean tree.
 
 ## Remediation directives
 
-Each finding carries a hardcoded per-check template (not user-configurable)
+Each finding carries a hardcoded per-smell template (not user-configurable)
 as a genesis `RemediationEntry`. The templates encode the pressure system:
 prose either *moves* to a legitimate channel, *dies*, or *the code
-improves* (rename/extract until the comment is unnecessary). Templates
-never say *which* refactor — naming and decomposition are the agent's job;
-sad refuses prose as a substitute.
+improves* (rename/extract until the comment is unnecessary).
+
+| Smell | Acceptable outcomes |
+|---|---|
+| `narration` | rename or extract until the code says it (preferred), or delete when the comment is redundant |
+| `apology`, `todo` | cite a resolvable ID — which moves the node to the marker channel — or fix the problem |
+| `commented_out_code` | delete and recover from VCS history |
+| `banner` | delete |
+| `unclassified`, `doc_cap` | move to header/doc with a one-sentence summary, tag as rationale, or cite a marker; deletion is offered only for a redundant comment |
+
+The contract is **"do not delete knowledge to satisfy the gate."**
+Templates never say *which* refactor — naming and decomposition are the
+agent's job; sad refuses prose as a substitute.
 
 ## Output contract (pretender mirror)
 
-- `sad check` → genesis suite envelope (`Check` kind): findings list +
-  `suppression_debt` + channel/exemption stats. Exit 0 on pass; 1 on
-  findings or gate failure.
+- `sad check` → genesis suite envelope (`Check` kind): findings (each with
+  `severity` and nullable `smell`) + `suppression_debt` + channel/exemption
+  stats. `stats.findings` counts every new finding after baseline
+  suppression; `stats.findings_blocking` counts the new errors. `ok` is
+  true iff `findings_blocking == 0`, and the exit status mirrors `ok`
+  (0 pass, 1 fail).
+- **Warnings report; errors block.** A default run lists warnings in the
+  envelope and text render and still passes. Enforcement is the baseline
+  delta: an adopted id stays grandfathered whatever its severity, so a
+  whole-tree run without a baseline reports every finding and fails only
+  on errors.
+- **`--strict`** restores the any-finding failure: `ok` is true iff
+  `findings == 0` (exit status mirrors it), while `findings_blocking`
+  still counts errors only. Hooks and CI configs written against v0.1's
+  "any finding fails" adopt `--strict` to keep their behaviour.
 - **Stable finding IDs** — `<path>::<symbol-path>::<content-hash>`:
   survive line drift and unrelated edits; die only when the comment itself
   moves or changes. File-scoped findings (`missing_header`,
   `suppression_cap_exceeded`) use `-` as the symbol-path. Identical base
   identities in one run are discriminated by an occurrence suffix
   (`#2`, `#3`, …) in report order, so every ID is unique; the first
-  occurrence keeps the bare identity.
+  occurrence keeps the bare identity. IDs never encode severity, so a
+  classifier change that promotes an adopted warning to error stays
+  grandfathered until re-adoption.
 - **`--adopt`** → writes `sad-baseline.json` of grandfathered IDs
-  (committed). A baseline suppresses its IDs and is shrink-only: fixing
-  prose makes the next run pass, while growing the baseline fails the run.
+  (committed). Adoption covers warnings as well as errors; a baseline
+  suppresses its IDs and is shrink-only: fixing prose makes the next run
+  pass, while growing the baseline fails the run.
   Schema version 2 carries the occurrence-discriminated IDs; a version-1
   baseline still suppresses exact matches, and the adoption that rewrites
   it may add IDs exactly once (a legacy ID set cannot be reproduced).
-- Single gate mode — boolean findings make gate+baseline equivalent to
-  pretender's gate/tiered split; no warn tier.
+- Two severity tiers map the old single gate onto pretender's
+  gate/tiered split: errors are the gate, warnings the tier.
+- Text mode, one line:
+  - nothing found: `sad check — pass: 0 findings in M files`
+  - warnings only: `sad check — pass: 0 blocking, W warnings in M files`
+  - errors: `sad check — fail: B blocking, W warnings in M files; <first>`
 - The same `sad check` invocation on the same tree produces the same
   envelope and exit code as a pre-hook and in CI. Operationally, the commit
   boundary still moves scope: the pre-hook sees the working tree, so
@@ -191,7 +299,7 @@ sad refuses prose as a substitute.
 | Knob | Default | Effect |
 |---|---|---|
 | `checks` | all enabled | per-check toggles |
-| `doc_summary_cap` | `1` | rendered lines allowed in a doc summary lead |
+| `doc_summary_cap` | `1` | sentences allowed in the doc summary lead |
 | `marker_prefix` | `see` | leading token for a traceability marker |
 | `marker_pattern` | `\b[a-z][a-z0-9]*-[a-z0-9]+\b` | ID shape after the prefix |
 | `resolvers` | `.beads/issues.jsonl`, `openspec/specs/` | resolution sources; each no-ops while absent |
@@ -238,20 +346,41 @@ resolution is file lookup only.
 ## Evidence status
 
 - **Evidence-backed:** suppression debt and its envelope;
-  unresolvable-marker detection; the summary-lead cap.
-- **Design-inherited:** the three-channel structure — components have
-  support, the architecture does not.
+  unresolvable-marker detection; the summary-lead cap. The diagnosis
+  behind the triage model is recorded in
+  `openspec/changes/comment-smell-triage/evidence.md`: 48
+  repositories, 3,873 files, 58,781 findings, of which 42.5% were in tests
+  and 24.7% mechanical noise, while TODO comments were 0.03% and
+  apology/workaround phrases 0.04%. The same corpus showed 39.6% of
+  `doc_summary_cap_exceeded` findings were single sentences wrapped across
+  source lines, and every inspected `commented_out_code` finding was a
+  banner, formula, or expected-value annotation rather than dead code.
+- **Design-inherited:** the four-channel structure and the smell rules —
+  components have support, the architecture does not. The classifier is
+  conservative by construction, so the sampled share of genuine narration
+  (roughly 10-15% of the non-test inline sample) is expected to remain a
+  minority signal.
 - **Bets:** the header requirement (zero corpus support; presence mandates
-  tend toward stub noise) and the premise that banning prose improves code
-  (correlational only).
+  tend toward stub noise), the premise that banning prose improves code
+  (correlational only), and that warning severity plus `--strict` keeps
+  the gate honest while the heuristics mature.
 
-The full ledger is in
-[`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md).
+The v1 ledger is in
+[`design.md`](https://github.com/charly-vibes/sad/blob/main/openspec/changes/archive/2026-11-18-specify-gate-objective/design.md);
+the triage evidence is `openspec/changes/comment-smell-triage/evidence.md`.
 
 ## Resolved decisions
 
 Nothing on this page is open. The knobs deferred by the v1 draft are
 resolved in the sections above: doc cap (Legitimate prose channels),
 header strictness and default (same section), generated/vendor excludes
-(Exemptions), and grammar pins (Languages). Rejected alternatives live in
-`design.md`; changing any decision requires a new spec delta.
+(Exemptions), and grammar pins (Languages). The triage model is resolved
+too: severity on every finding with nullable `smell` ([Severity and
+smells](#severity-and-smells)), the closed rationale tag set and its
+place in the structural precedence (Legitimate prose channels), the
+sentence-counted doc cap (same section), per-smell remediation
+dispositions, and the warning-tolerant verdict with `--strict`
+([Output contract](#output-contract-pretender-mirror)). `doc_summary_cap`
+keeps its key and default and now reads as sentences. No knobs are open;
+rejected alternatives live in `design.md`; changing any decision requires
+a new spec delta.

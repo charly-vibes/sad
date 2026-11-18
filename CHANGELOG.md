@@ -3,6 +3,48 @@
 All notable changes to sad. The format is loose — this project versions by
 milestone, not by cadence.
 
+## v0.2.0 — unreleased
+
+- **Severity on every finding** (change `comment-smell-triage`): findings
+  carry `severity: error|warning`, and `smell` names the prose smell —
+  `narration`, `apology`, `todo`, `banner`, `commented_out_code`,
+  `doc_cap`, `unclassified` — or is `null` for structural findings
+  (`missing_header`, `unresolvable_marker`,
+  `suppression_cap_exceeded`). Errors: narration, apology, todo, and the
+  structural findings. Warnings: banner, unclassified, doc cap, and
+  `commented_out_code` until `sad-jdw` restores its precision.
+- Smell classifier: one deterministic post-pass over each maximal
+  adjacent prose run, so a multi-line comment is judged as a unit while
+  every member node keeps its own stable ID. Rules cover TODO/FIXME/XXX
+  keywords, apology phrases (a bare "temporary" or "hack" is not
+  enough), narration (a shared distinctive-token set with the next
+  statement in scope, or a sequencer plus a named call), banners, and an
+  `unclassified` fallback.
+- Rationale is a channel (the fourth): a leading `SAFETY:`, `INVARIANT:`,
+  `SECURITY:`, or `WHY:` tag with a non-empty body is counted in
+  `stats.comments_rationale` and is not debt; `NOTE:` stays prose.
+  Attribution precedence is fixed: header > doc > marker > rationale >
+  suppression > exemption > prose.
+- Doc cap measured in sentences: `doc_summary_cap` now counts sentences
+  in the summary lead (text up to the first blank line) instead of
+  rendered lines. One sentence passes however it wraps; inline code,
+  URLs, abbreviations and version tokens do not split a sentence;
+  sections after the first blank line are uncapped.
+- `--strict` fails on any finding; `stats.findings_blocking` counts the
+  new error-severity findings. The verdict now blocks on errors only, and
+  adoption covers warnings as well as errors.
+- Text mode names the split: `sad check — pass: 0 findings in M files`,
+  `sad check — pass: 0 blocking, W warnings in M files`, or
+  `sad check — fail: B blocking, W warnings in M files; <first>`.
+- **BREAKING:** `ok` and the exit status now derive from error-severity
+  findings, so warning-only runs pass (0.1.0 failed on any finding).
+  Consumers that treated any finding as a failure must pass `--strict`
+  or read `findings_blocking`. Finding IDs are unchanged and existing
+  baselines carry over; a classifier change that promotes an adopted
+  warning to error stays grandfathered until re-adoption.
+  `doc_summary_cap` keeps its key and default (`1`), now read as
+  sentences; see [docs/src/gate-model.md](docs/src/gate-model.md).
+
 ## v0.1.0 — unreleased
 
 - Scaffold: Rust workspace, genesis-envelope CLI skeleton (`sad version`),
