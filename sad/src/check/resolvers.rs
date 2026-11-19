@@ -75,13 +75,24 @@ fn repo_context(repo: &Path, cfg: &Config) -> Result<RepoContext, GateFailure> {
 /// A missing ledger is the documented no-op, not an error. A ledger that exists
 /// but yields no id is a gate failure naming the file: treating it as available
 /// with an empty id set would turn every marker into a finding whose
-/// remediation blames the comment instead of the broken export.
+/// remediation blames the comment instead of the broken export. The same
+/// refusal covers an existing ledger that cannot be read at all (unreadable
+/// or undecodable): availability must never silently depend on read errors.
 fn beads_context(repo: &Path, enabled: bool) -> Result<(BTreeSet<String>, bool), GateFailure> {
     if !enabled {
         return Ok((BTreeSet::new(), false));
     }
-    let Ok(text) = fs::read_to_string(repo.join(BEADS_LEDGER)) else {
+    let ledger_path = repo.join(BEADS_LEDGER);
+    if !ledger_path.exists() {
         return Ok((BTreeSet::new(), false));
+    }
+    let Ok(text) = fs::read_to_string(&ledger_path) else {
+        return Err(GateFailure::Ledger {
+            message: format!(
+                "beads ledger `{BEADS_LEDGER}` exists but cannot be read or decoded; the \
+                 resolver cannot judge any marker",
+            ),
+        });
     };
     let ledger = parse_beads_ids(&text);
     if ledger.records == 0 && ledger.non_blank_lines > 0 {
@@ -191,3 +202,21 @@ mod tests {
         assert_eq!(ledger.records, 0);
     }
 }
+
+    #[test]
+    fn existing_but_unreadable_ledger_fails_and_missing_is_a_no_op() {
+        let dir = std::env::temp_dir().join(format!("sad-resolvers-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".beads")).unwrap();
+        let ledger = dir.join(BEADS_LEDGER);
+        std::fs::write(&ledger, b"\xff\xfe not utf-8").unwrap();
+        // An existing ledger that cannot be decoded must fail the gate:
+        // silently disabling marker judgement would blame comments instead
+        // of the broken ledger.
+        let outcome = beads_context(&dir, true);
+        assert!(outcome.is_err(), "expected GateFailure, got {outcome:?}");
+        std::fs::remove_file(&ledger).unwrap();
+        let (ids, available) = beads_context(&dir, true).unwrap();
+        assert!(!ids.is_empty() || !available, "missing ledger is the documented no-op");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
