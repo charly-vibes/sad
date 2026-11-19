@@ -163,7 +163,7 @@ fn bare_temporary_is_unclassified_but_apology_shapes_are_errors() {
 #[test]
 fn a_resolving_marker_keeps_an_apology_out_of_the_error_set() {
     let cfg = Config::default();
-    let source = "fn run() {\n    // workaround see sad-1\n    work();\n}\n";
+    let source = "function a() { /* Now: gather the widgets */ gather_widgets(); } function b() { /* TODO sad-xss: revisit this later */ return 2; }";
     let file = analyze(
         "tests/fixtures/checks/smell/marked_apology.rs",
         source,
@@ -325,5 +325,29 @@ fn apology_guidance_names_the_marker_channel() {
     assert!(
         !description.contains("delete"),
         "an apology is never fixed by a bare delete: {description}"
+    );
+}
+
+// spec: Smell post-pass / Findings on one row from different runs keep their own smell.
+#[test]
+fn same_row_findings_from_different_runs_keep_their_own_smell() {
+    let source = "function a() { /* Now: gather the widgets */ gather_widgets(); } \
+                  function b() { /* TODO sad-xss: revisit this later */ return 2; }\n";
+    let cfg = Config::default();
+    let file = analyze("checks/same_row.ts", source, &cfg);
+    let findings = classified(&file, &cfg, &RepoContext::empty());
+    assert_eq!(findings.len(), 2, "both comments must be findings: {findings:?}");
+    let narration = finding(&findings, "Now: gather the widgets");
+    let todo = finding(&findings, "TODO sad-xss: revisit this later");
+    assert_ne!(narration.symbol_path, todo.symbol_path, "runs must not join across symbols");
+    assert!(
+        matches!(narration.smell, Some(Smell::Narration)),
+        "narration run must keep its smell, got {:?}",
+        narration.smell
+    );
+    assert!(
+        matches!(todo.smell, Some(Smell::Todo)),
+        "todo run must keep its smell, got {:?}",
+        todo.smell
     );
 }

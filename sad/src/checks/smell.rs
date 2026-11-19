@@ -19,7 +19,7 @@ use crate::attribution::leading_marker_id;
 use crate::checks::RepoContext;
 use crate::config::Config;
 use crate::model::{
-    AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, Severity, Smell,
+    AnalyzedFile, AttributionClass, CommentNode, Finding, FindingKind, Severity, Smell, finding_id,
 };
 use crate::remediation;
 
@@ -56,28 +56,21 @@ pub fn classify(
 }
 
 /// Stamp one run's resolved smell, severity, and remediation on its members.
+///
+/// Membership is keyed on stable finding ids, not path+line: two single-node
+/// runs can share a row, and a line-keyed stamp would let the last run's
+/// verdict overwrite its neighbour's.
 fn apply_smell_to_run(findings: &mut [Finding], file: &AnalyzedFile, run: &[usize], smell: Smell) {
     let severity = severity_of(smell);
-    for index in run {
-        let line = file.nodes[*index].line;
-        apply_smell_to_line(findings, &file.path, line, smell, severity);
-    }
-}
-
-/// Rewrite every outside-channel finding at `path` and `line`; others untouched.
-fn apply_smell_to_line(
-    findings: &mut [Finding],
-    path: &str,
-    line: usize,
-    smell: Smell,
-    severity: Severity,
-) {
-    let targets = findings.iter_mut().filter(|finding| {
-        finding.check == FindingKind::CommentOutsideChannel
-            && finding.path == path
-            && finding.line == line
-    });
-    for finding in targets {
+    let ids: BTreeSet<String> = run
+        .iter()
+        .map(|&index| {
+            finding_id(&file.path, &file.nodes[index].symbol_path, &file.nodes[index].body)
+        })
+        .collect();
+    for finding in findings.iter_mut().filter(|finding| {
+        finding.check == FindingKind::CommentOutsideChannel && ids.contains(&finding.id)
+    }) {
         finding.smell = Some(smell);
         finding.severity = severity;
         finding.remediation = remediation::for_smell(smell, &finding.path);
