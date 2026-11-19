@@ -184,3 +184,129 @@ fn install_outside_a_git_repository_writes_nothing() {
     );
     let _ = fs::remove_dir_all(&plain);
 }
+
+#[test]
+fn install_wires_both_stages_when_both_sections_exist() {
+    // genesis's file-level idempotence satisfied pre-push from
+    // pre-commit's block (genesis-an6, fixed in 0.13.3); the common
+    // both-sections config is the shape this command exists for.
+    let repo = Repo::init("dual");
+    fs::write(
+        repo.path().join("lefthook.yml"),
+        "pre-commit:\n  commands:\n    lint:\n      run: echo lint\npre-push:\n  commands:\n    test:\n      run: echo test\n",
+    )
+    .unwrap();
+
+    sad()
+        .args(["hooks", "install", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .success()
+        .stdout(str::contains("\"pre_commit\":\"injected\""))
+        .stdout(str::contains("\"pre_push\":\"injected\""));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    assert_eq!(
+        content.matches("# sad:managed:start").count(),
+        2,
+        "both stages must carry the block; got:\n{content}"
+    );
+    assert!(
+        content.contains("run: echo lint") && content.contains("run: echo test"),
+        "existing commands must be preserved; got:\n{content}"
+    );
+}
+
+#[test]
+fn install_reports_partial_wiring_and_completes_idempotently() {
+    // Scenario: pre-commit wires, pre-push is unanchorable (quoted key).
+    // The failure envelope names pre-push while the pre-commit block stays
+    // on disk; fixing the key and re-running completes without a duplicate.
+    let repo = Repo::init("partial");
+    fs::write(
+        repo.path().join("lefthook.yml"),
+        "pre-commit:\n  commands:\n    lint:\n      run: echo lint\n'pre-push':\n  commands:\n    other:\n      run: echo push\n",
+    )
+    .unwrap();
+
+    sad()
+        .args(["hooks", "install", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .failure()
+        .stdout(str::contains("hooks_install_error"))
+        .stdout(str::contains("pre-push"));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    assert!(
+        content.contains("# sad:managed:start") && !content.contains("pre-push:"),
+        "the wired stage must persist on disk; got:\n{content}"
+    );
+
+    fs::write(
+        repo.path().join("lefthook.yml"),
+        "pre-commit:\n  commands:\n# sad:managed:start\n    sad-check:\n      run: sad check\n# sad:managed:end\n    lint:\n      run: echo lint\npre-push:\n  commands:\n    other:\n      run: echo push\n",
+    )
+    .unwrap();
+
+    sad()
+        .args(["hooks", "install", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .success()
+        .stdout(str::contains("\"pre_push\":\"injected\""));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    assert_eq!(
+        content.matches("# sad:managed:start").count(),
+        2,
+        "re-running must complete wiring without duplicating the block; got:\n{content}"
+    );
+}
+
+#[test]
+fn install_skips_a_user_gate_after_the_managed_block() {
+    // Scenario: a user adds their own `run: sad check` command below the
+    // injected block; column-0 comments do not end a stage section, so the
+    // guard must see it and skip the stage instead of doubling the gate.
+    let repo = Repo::init("gate-after-block");
+    fs::write(
+        repo.path().join("lefthook.yml"),
+        "pre-commit:\n  commands:\n# sad:managed:start\n    sad-check:\n      run: sad check\n# sad:managed:end\n    gate:\n      run: sad check\n",
+    )
+    .unwrap();
+
+    sad()
+        .args(["hooks", "install", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .success()
+        .stdout(str::contains("\"pre_commit\":\"skipped_user_gate\""));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    let push_at = content.find("pre-push:").expect("pre-push must be wired");
+    assert_eq!(
+        content[..push_at].matches("# sad:managed:start").count(),
+        1,
+        "the guarded stage must not gain a duplicate block; got:\n{content}"
+    );
+    assert!(
+        content[push_at..].contains("run: sad check"),
+        "the unwired stage must still be wired; got:\n{content}"
+    );
+}
+
+#[test]
+fn install_text_mode_names_the_stages() {
+    let repo = Repo::init("text");
+    fs::write(repo.path().join("lefthook.yml"), lefthook_stub()).unwrap();
+
+    sad()
+        .args(["hooks", "install"])
+        .current_dir(repo.path())
+        .assert()
+        .success()
+        .stdout(str::contains("hooks install"))
+        .stdout(str::contains("pre-commit: injected"))
+        .stdout(str::contains("pre-push: injected"));
+}

@@ -22,6 +22,9 @@ pub fn render_text(json: &str) -> String {
         return check_text(&v);
     }
     if v["ok"].as_bool().unwrap_or(false) {
+        if let Some(line) = hooks_text(&v) {
+            return line;
+        }
         let name = v["data"]["name"].as_str().unwrap_or("sad");
         let version = v["data"]["version"].as_str().unwrap_or("?");
         let status = v["data"]["status"].as_str().unwrap_or("ok");
@@ -32,6 +35,15 @@ pub fn render_text(json: &str) -> String {
             v["data"]["message"].as_str().unwrap_or("unknown error")
         )
     }
+}
+
+/// One-line `hooks install` summary: the command and each stage outcome.
+fn hooks_text(v: &Value) -> Option<String> {
+    let commit = v["data"]["pre_commit"].as_str()?;
+    let push = v["data"]["pre_push"].as_str()?;
+    Some(format!(
+        "sad hooks install — pre-commit: {commit}; pre-push: {push}\n"
+    ))
 }
 
 /// One-line check summary: verdict, severity counts, first finding, and skip

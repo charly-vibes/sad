@@ -1,3 +1,9 @@
 [workspace]
 members = ["sad"]
 resolver = "2"
+
+# TEMPORARY: unblocks `sad hooks install` dual-section wiring ahead of the
+# genesis-vibes 0.13.3 crates.io release (genesis 8ad33c9, genesis-an6).
+# Drop this once 0.13.3 is published and bump sad's genesis dep to "0.13.3".
+[patch.crates-io]
+genesis-vibes = { path = "../genesis" }

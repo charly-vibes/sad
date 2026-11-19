@@ -32,6 +32,13 @@ const SAD_HOOK_COMMAND: &str = "\n    sad-check:\n      run: sad check\n";
 /// The stages the gate wires, in wiring order.
 const STAGES: [Stage; 2] = [Stage::PreCommit, Stage::PrePush];
 
+/// The sad-owned managed block identity, markers included: genesis's
+/// idempotence matches this exact text, and the guard must know the same
+/// markers to skip our own block when scanning for user-authored gates.
+const MANAGED_NAME: &str = "sad:managed";
+const MANAGED_START: &str = "# sad:managed:start";
+const MANAGED_END: &str = "# sad:managed:end";
+
 /// Why `sad hooks install` refused to wire the gate.
 ///
 #[derive(Debug)]
@@ -97,13 +104,15 @@ impl From<git_hooks::GitHooksError> for HooksError {
 /// Install or verify the sad gate in the repository containing `start`,
 /// for both pinned stages, and report what each stage became.
 ///
-/// Errors leave the config untouched: genesis refuses to anchor or to
+/// Wiring is per stage: a stage that fails leaves the stages wired before
+/// it in place, and re-running after fixing the config completes the
+/// wiring (`already_wired` outcomes). Genesis refuses to anchor or to
 /// guess at unbalanced markers, and the pre-insertion guard runs before
 /// any write.
 pub fn install(start: &Path) -> Result<HooksInstall, HooksError> {
     let root = git_hooks::repo_root_from(start)?;
     let existing = config_text(&root);
-    let block = BlockDef::with_markers("sad:managed", "# sad:managed:start", "# sad:managed:end");
+    let block = BlockDef::with_markers(MANAGED_NAME, MANAGED_START, MANAGED_END);
     let mut install = HooksInstall {
         pre_commit: StageOutcome::AlreadyWired,
         pre_push: StageOutcome::AlreadyWired,
@@ -146,30 +155,67 @@ fn config_text(root: &Path) -> Option<String> {
         .and_then(|path| std::fs::read_to_string(path).ok())
 }
 
-/// Whether the stage's section already invokes the gate (espectacular
-/// GH#47): genesis's idempotence matches only the exact block text, so a
-/// user-authored `run: sad check` would gain a duplicate without this
-/// scan.
+/// Whether the stage's section already invokes the gate outside the
+/// managed block (espectacular GH#47): genesis's idempotence matches only
+/// the exact block text, so a user-authored `run: sad check` would gain a
+/// duplicate without this scan.
 ///
-/// The section spans from the stage's column-0 key line to the next
-/// non-blank column-0 line; a missing stage returns false, because its
-/// wiring proceeds.
+/// The section spans the stage's column-0 `key:` line to the next
+/// column-0 key; comment lines, including our own markers, do not end it,
+/// so a gate below the block is still seen. Lines between the markers are
+/// our own block and never count as user gates. A missing stage returns
+/// false, because its wiring proceeds.
 fn stage_runs_gate(content: &str, stage_key: &str) -> bool {
-    let start = if content.starts_with(stage_key) {
-        0
-    } else {
-        match content.find(&format!("\n{stage_key}:")) {
-            Some(index) => index + 1,
-            None => return false,
-        }
+    let Some(section) = stage_section(content, stage_key) else {
+        return false;
     };
-    for line in content[start..].lines().skip(1) {
-        if !line.is_empty() && !line.starts_with([' ', '\t']) {
-            break;
+    let mut in_block = false;
+    for line in section.lines().skip(1) {
+        if line.trim_end() == MANAGED_START {
+            in_block = true;
+            continue;
+        }
+        if in_block {
+            in_block = line.trim_end() != MANAGED_END;
+            continue;
         }
         if line.contains("sad check") {
             return true;
         }
     }
     false
+}
+
+/// The stage's section including its `key:` line: from the key to the
+/// next column-0 key line. Column-0 comments are not keys (mirrors
+/// genesis's `is_column_zero_key`), so injected markers stay inside the
+/// section; a missing stage yields `None`.
+fn stage_section<'a>(content: &'a str, stage_key: &str) -> Option<&'a str> {
+    let start = if content.starts_with(stage_key) {
+        0
+    } else {
+        content.find(&format!("\n{stage_key}:"))? + 1
+    };
+    let rest = &content[start..];
+    let mut end = rest.len();
+    let mut scanned = 0;
+    for line in rest.split_inclusive('\n').skip(1) {
+        if is_column_zero_key(line) {
+            end = scanned;
+            break;
+        }
+        scanned += line.len();
+    }
+    Some(&rest[..end.min(rest.len())])
+}
+
+/// True for a column-0 YAML key: first char is not whitespace or `#`, and
+/// the line is not an HTML-comment marker. Mirrors genesis's
+/// `is_column_zero_key` so the guard reads sections exactly as
+/// `ensure_wired` anchors them.
+fn is_column_zero_key(line: &str) -> bool {
+    matches!(
+        line.chars().next(),
+        Some(c) if c != ' ' && c != '\t' && c != '#' && c != '\n'
+    ) && !line.starts_with("<!--")
 }
