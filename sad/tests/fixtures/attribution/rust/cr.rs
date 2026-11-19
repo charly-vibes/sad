@@ -1,0 +1,1 @@
+//! Purpose: pin lone-CR normalisation.//! Responsibilities: classify CR-only sources like LF sources.// see sad-lcy: cap rule from reviewfn cr() {    // this function calculates the total    let total = 1;}

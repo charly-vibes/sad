@@ -45,10 +45,10 @@ pub fn language_for_path(path: &Path) -> Option<Language> {
     }
 }
 
-/// Normalise CRLF line endings so line attribution is stable.
+/// Normalise CRLF and lone-CR line endings so line attribution is stable.
 fn normalise_source(source: &str) -> Cow<'_, str> {
     if source.contains('\r') {
-        Cow::Owned(source.replace("\r\n", "\n"))
+        Cow::Owned(source.replace("\r\n", "\n").replace('\r', "\n"))
     } else {
         Cow::Borrowed(source)
     }

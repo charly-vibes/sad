@@ -304,3 +304,28 @@ fn pyi_stubs_are_analyzed_as_python() {
         ],
     );
 }
+
+// spec: Channel attribution / Lone-CR sources classify identically to LF sources.
+#[test]
+fn rust_lone_cr_classifies_identically_and_lines_are_counted() {
+    let file = analyze("rust", "cr.rs");
+    assert!(file.header);
+    assert_nodes(
+        &file,
+        &[
+            (1, CommentKind::Doc, AttributionClass::Header),
+            (2, CommentKind::Doc, AttributionClass::Header),
+            (4, CommentKind::Line, AttributionClass::Marker),
+            (6, CommentKind::Line, AttributionClass::Prose),
+        ],
+    );
+    for node in &file.nodes {
+        assert!(
+            !node.body.contains('\r'),
+            "body at line {} must be CR-normalised, got {:?}",
+            node.line,
+            node.body
+        );
+    }
+    assert_eq!(node_at(&file, 6).body, "this function calculates the total");
+}
