@@ -9,101 +9,14 @@
 //! work and skip untouched legacy prose, and attribution must come from
 //! explicit commit trailers rather than git heuristics or working-tree state.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+mod support;
+
+use std::path::PathBuf;
 
 use sad::config::Config;
 use sad::scope::{governing_revisions, has_agent_trailer, select, select_in_scope};
 
-static NEXT_REPO: AtomicUsize = AtomicUsize::new(0);
-
-/// A throwaway git repository under the system temp directory.
-///
-/// Dropping the value removes the directory even when an assertion panics, so
-/// a failing run leaves no state behind.
-struct Repo {
-    path: PathBuf,
-}
-
-impl Repo {
-    fn init(label: &str) -> Self {
-        let serial = NEXT_REPO.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock must be after the Unix epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "sad-scope-{label}-{}-{serial}-{nanos}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path)
-            .unwrap_or_else(|err| panic!("creating temp repo {}: {err}", path.display()));
-
-        let repo = Self { path };
-        repo.git(&["init", "-q"]);
-        // Local identity keeps the tests independent of global git config.
-        repo.git(&["config", "user.email", "sad-scope-test@example.invalid"]);
-        repo.git(&["config", "user.name", "sad scope tests"]);
-        repo.git(&["config", "commit.gpgsign", "false"]);
-        repo
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn write_file(&self, rel_path: &str, contents: &str) {
-        let full = self.path.join(rel_path);
-        if let Some(parent) = full.parent() {
-            fs::create_dir_all(parent)
-                .unwrap_or_else(|err| panic!("creating {}: {err}", parent.display()));
-        }
-        fs::write(&full, contents)
-            .unwrap_or_else(|err| panic!("writing {}: {err}", full.display()));
-    }
-
-    /// Run git in the repo and fail loudly on any non-zero status.
-    fn git(&self, args: &[&str]) -> String {
-        let output = Command::new("git")
-            .current_dir(&self.path)
-            .args(args)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .env_remove("GIT_INDEX_FILE")
-            .output()
-            .unwrap_or_else(|err| panic!("spawning `git {}`: {err}", args.join(" ")));
-        assert!(
-            output.status.success(),
-            "`git {}` failed with {}\nstdout:\n{}\nstderr:\n{}",
-            args.join(" "),
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        String::from_utf8(output.stdout).expect("git stdout must be valid UTF-8")
-    }
-
-    /// Stage everything and commit with `message`; the message is passed
-    /// verbatim so callers control the trailer paragraph.
-    fn commit(&self, message: &str) {
-        self.git(&["add", "-A"]);
-        self.git(&["commit", "--no-verify", "-m", message]);
-    }
-}
-
-impl Drop for Repo {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn paths(items: &[&str]) -> Vec<String> {
-    items.iter().map(|item| (*item).to_string()).collect()
-}
+use support::scope_repo::{Repo, paths};
 
 #[test]
 fn trailer_detection_matches_git_trailer_semantics() {
@@ -274,9 +187,6 @@ fn governing_revisions_resolve_paths_relative_to_the_invocation_directory() {
 /// Every path resolves to "no governing commit" instead of panicking.
 #[test]
 fn governing_revisions_degrade_when_git_history_is_unreadable() {
-    let serial = NEXT_REPO.fetch_add(1, Ordering::Relaxed);
-    let plain =
-        std::env::temp_dir().join(format!("sad-scope-nogit-{serial}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&plain);
     fs::create_dir_all(&plain).expect("creating a plain directory");
 

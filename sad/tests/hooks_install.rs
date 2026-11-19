@@ -185,11 +185,11 @@ fn install_outside_a_git_repository_writes_nothing() {
     let _ = fs::remove_dir_all(&plain);
 }
 
+/// genesis's file-level idempotence satisfied pre-push from pre-commit's
+/// block (genesis-an6, fixed in 0.13.3); the common both-sections config
+/// is the shape this command exists for.
 #[test]
 fn install_wires_both_stages_when_both_sections_exist() {
-    // genesis's file-level idempotence satisfied pre-push from
-    // pre-commit's block (genesis-an6, fixed in 0.13.3); the common
-    // both-sections config is the shape this command exists for.
     let repo = Repo::init("dual");
     fs::write(
         repo.path().join("lefthook.yml"),
@@ -218,10 +218,10 @@ fn install_wires_both_stages_when_both_sections_exist() {
 }
 
 #[test]
-fn install_reports_partial_wiring_and_completes_idempotently() {
+fn install_reports_partial_wiring_when_a_later_stage_fails() {
     // Scenario: pre-commit wires, pre-push is unanchorable (quoted key).
     // The failure envelope names pre-push while the pre-commit block stays
-    // on disk; fixing the key and re-running completes without a duplicate.
+    // on disk.
     let repo = Repo::init("partial");
     fs::write(
         repo.path().join("lefthook.yml"),
@@ -242,7 +242,14 @@ fn install_reports_partial_wiring_and_completes_idempotently() {
         content.contains("# sad:managed:start") && !content.contains("pre-push:"),
         "the wired stage must persist on disk; got:\n{content}"
     );
+}
 
+#[test]
+fn install_completes_partial_wiring_on_rerun() {
+    // Scenario: the config from a partial run with the quoted key fixed.
+    // Re-running reports the wired stage already_wired and wires the rest
+    // without duplicating the block.
+    let repo = Repo::init("complete");
     fs::write(
         repo.path().join("lefthook.yml"),
         "pre-commit:\n  commands:\n# sad:managed:start\n    sad-check:\n      run: sad check\n# sad:managed:end\n    lint:\n      run: echo lint\npre-push:\n  commands:\n    other:\n      run: echo push\n",
@@ -254,6 +261,7 @@ fn install_reports_partial_wiring_and_completes_idempotently() {
         .current_dir(repo.path())
         .assert()
         .success()
+        .stdout(str::contains("\"pre_commit\":\"already_wired\""))
         .stdout(str::contains("\"pre_push\":\"injected\""));
 
     let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
@@ -264,11 +272,13 @@ fn install_reports_partial_wiring_and_completes_idempotently() {
     );
 }
 
+/// A user adds their own `run: sad check` command below the injected
+/// block.
+///
+/// Column-0 comments do not end a stage section, so the guard sees it and
+/// skips the stage instead of doubling the gate.
 #[test]
 fn install_skips_a_user_gate_after_the_managed_block() {
-    // Scenario: a user adds their own `run: sad check` command below the
-    // injected block; column-0 comments do not end a stage section, so the
-    // guard must see it and skip the stage instead of doubling the gate.
     let repo = Repo::init("gate-after-block");
     fs::write(
         repo.path().join("lefthook.yml"),
