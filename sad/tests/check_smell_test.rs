@@ -336,10 +336,17 @@ fn same_row_findings_from_different_runs_keep_their_own_smell() {
     let cfg = Config::default();
     let file = analyze("checks/same_row.ts", source, &cfg);
     let findings = classified(&file, &cfg, &RepoContext::empty());
-    assert_eq!(findings.len(), 2, "both comments must be findings: {findings:?}");
+    assert_eq!(
+        findings.len(),
+        2,
+        "both comments must be findings: {findings:?}"
+    );
     let narration = finding(&findings, "Now: gather the widgets");
     let todo = finding(&findings, "TODO sad-xss: revisit this later");
-    assert_ne!(narration.symbol_path, todo.symbol_path, "runs must not join across symbols");
+    assert_ne!(
+        narration.symbol_path, todo.symbol_path,
+        "runs must not join across symbols"
+    );
     assert!(
         matches!(narration.smell, Some(Smell::Narration)),
         "narration run must keep its smell, got {:?}",

@@ -65,7 +65,11 @@ fn apply_smell_to_run(findings: &mut [Finding], file: &AnalyzedFile, run: &[usiz
     let ids: BTreeSet<String> = run
         .iter()
         .map(|&index| {
-            finding_id(&file.path, &file.nodes[index].symbol_path, &file.nodes[index].body)
+            finding_id(
+                &file.path,
+                &file.nodes[index].symbol_path,
+                &file.nodes[index].body,
+            )
         })
         .collect();
     for finding in findings.iter_mut().filter(|finding| {
