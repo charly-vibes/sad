@@ -37,6 +37,7 @@ use std::path::Path;
 mod revisions;
 
 use revisions::git_command;
+pub use revisions::governing_revisions;
 
 use crate::config::Config;
 
