@@ -329,3 +329,69 @@ fn rust_lone_cr_classifies_identically_and_lines_are_counted() {
     }
     assert_eq!(node_at(&file, 6).body, "this function calculates the total");
 }
+
+// spec: Extraction / a pathological AST must not overflow the extract walk.
+#[test]
+fn deeply_nested_trees_are_walked_without_recursing() {
+    // The analysis runs on a deliberately tiny stack: the recursive walk
+    // this loop replaced exhausted a full thread stack inside 20k nesting,
+    // while the iterative walk keeps its pending set on the heap and a
+    // 128 KiB stack comfortably covers every other per-file cost.
+    let outcome = std::thread::Builder::new()
+        .stack_size(128 * 1024)
+        .spawn(|| {
+            for (name, source) in deep_sources(2_000) {
+                let file = analyze_file(Path::new(&name), name, &source, &Config::default());
+                let deep = file
+                    .nodes
+                    .iter()
+                    .find(|node| node.body.contains("deep marker"))
+                    .unwrap_or_else(|| {
+                        panic!("{name} must extract the comment buried at full depth")
+                    });
+                assert!(
+                    deep.body.contains("deep marker"),
+                    "{name} must reach the innermost parens, got {:?}",
+                    deep.body
+                );
+                assert!(
+                    file.nodes
+                        .iter()
+                        .any(|node| node.body.contains("tail comment")),
+                    "{name} must keep extracting past the deep expression"
+                );
+            }
+        })
+        .expect("spawning the small-stack probe thread")
+        .join();
+    assert!(
+        outcome.is_ok(),
+        "the extract walk must not overflow the probe stack: {outcome:?}"
+    );
+}
+
+/// Deep-nesting sources per language, each burying a comment inside the
+/// innermost parens and a line comment after the expression.
+fn deep_sources(depth: usize) -> Vec<(&'static str, String)> {
+    let nested = |inside: &str| format!("{}{inside}{}", "(".repeat(depth), ")".repeat(depth));
+    vec![
+        (
+            "tests/fixtures/generated/deep.rs",
+            format!(
+                "fn deep() {{\n    let x = {};\n}}\n// tail comment\n",
+                nested("/* deep marker */ 0")
+            ),
+        ),
+        (
+            "tests/fixtures/generated/deep.py",
+            format!("x = {}  # tail comment\n", nested("# deep marker\n0")),
+        ),
+        (
+            "tests/fixtures/generated/deep.ts",
+            format!(
+                "const x = {};\n// tail comment\n",
+                nested("/* deep marker */ 0")
+            ),
+        ),
+    ]
+}

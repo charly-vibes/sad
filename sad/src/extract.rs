@@ -121,35 +121,45 @@ struct Extractor<'a> {
 }
 
 impl<'a> Extractor<'a> {
-    fn walk(&mut self, node: Node<'_>) {
-        match self.language {
-            Language::Rust => {
-                if matches!(node.kind(), "line_comment" | "block_comment") {
-                    self.push_comment(node);
+    /// Visits every node in pre-order without recursing.
+    ///
+    /// The recursion this loop replaced overflowed the stack on pathological
+    /// ASTs: a few tens of thousands of nested parens parse fine and then
+    /// the per-node frames exhaust the thread stack. Nodes are sorted into
+    /// source order at the end of [`collect_nodes`], so visit order carries
+    /// no observable meaning beyond docstring `is_module` flags, which the
+    /// node kinds themselves determine.
+    fn walk(&mut self, root: Node<'_>) {
+        let mut pending = vec![root];
+        while let Some(node) = pending.pop() {
+            match self.language {
+                Language::Rust => {
+                    if matches!(node.kind(), "line_comment" | "block_comment") {
+                        self.push_comment(node);
+                    }
+                }
+                Language::Python => {
+                    if node.kind() == "comment" {
+                        self.push_comment(node);
+                    }
+                    if matches!(
+                        node.kind(),
+                        "module" | "class_definition" | "function_definition"
+                    ) && let Some(docstring) = python_docstring(node)
+                    {
+                        self.push_docstring(docstring, node.kind() == "module");
+                    }
+                }
+                Language::TypeScript => {
+                    if node.kind() == "comment" {
+                        self.push_comment(node);
+                    }
                 }
             }
-            Language::Python => {
-                if node.kind() == "comment" {
-                    self.push_comment(node);
-                }
-                if matches!(
-                    node.kind(),
-                    "module" | "class_definition" | "function_definition"
-                ) && let Some(docstring) = python_docstring(node)
-                {
-                    self.push_docstring(docstring, node.kind() == "module");
-                }
-            }
-            Language::TypeScript => {
-                if node.kind() == "comment" {
-                    self.push_comment(node);
-                }
-            }
-        }
 
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            self.walk(child);
+            let mut cursor = node.walk();
+            let children: Vec<_> = node.children(&mut cursor).collect();
+            pending.extend(children.into_iter().rev());
         }
     }
 
