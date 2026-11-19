@@ -7,8 +7,10 @@
 //! Rationale: the envelope is the *single* output format for all CLI commands
 //! (callers check `ok` first); Invariant 3.2.5 forbids emitting an error
 //! without non-empty remediation, so every error path carries a fix hint.
-//! The tool is a deterministic gate: no network, no models, no randomness —
-//! same input tree, same findings. Text mode also explains an empty
+//! The check pipeline always analyses the working directory — an unavailable
+//! cwd degrades to `.` rather than panicking — so the CLI contract holds even
+//! there. The tool is a deterministic gate: no network, no models, no
+//! randomness — same input tree, same findings. Text mode also explains an empty
 //! attribution scope and every source the run could not read, so a green gate
 //! that gated nothing never reads like a clean tree.
 
@@ -26,6 +28,7 @@ use crate::{check, envelope};
 const DEFAULT_CONFIG_FILE: &str = "sad.toml";
 
 /// Top-level CLI: `sad [--json] <subcommand>`.
+///
 #[derive(Debug, Parser)]
 #[command(
     name = "sad",
@@ -44,6 +47,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Print tool identity as a suite envelope.
+    ///
     Version,
     /// Analyze the working tree for documentation drift.
     Check {
@@ -86,7 +90,9 @@ fn version_envelope() -> Envelope<VersionData> {
 }
 
 /// Resolve the effective config: explicit `--config`, else `./sad.toml` when
-/// present, else [`Config::default`]. Discovery attempts the read, treating
+/// present, else [`Config::default`].
+///
+/// Discovery attempts the read, treating
 /// only `NotFound` as absent, so an unreadable `sad.toml` is an error rather
 /// than a silent fallback to defaults. On failure the tuple carries the path
 /// that should be named in the error envelope.
@@ -128,7 +134,9 @@ fn config_error_envelope(path: &Path, err: &ConfigError) -> serde_json::Value {
 
 /// Error envelope for a gate failure — a corrupt, unreadable, or
 /// growth-violating `sad-baseline.json`, or a beads ledger that cannot judge
-/// ids. The message names the artifact and the remediation is non-empty by
+/// ids.
+///
+/// The message names the artifact and the remediation is non-empty by
 /// construction; `config` is threaded through so a re-adoption hint repeats
 /// the invocation the caller actually used.
 fn gate_failure_envelope(
@@ -208,7 +216,9 @@ fn ledger_remediation() -> Vec<RemediationEntry> {
 }
 
 /// The single dispatch: every command returns its envelope serialized to
-/// JSON. Callers check `ok` first — the envelope is the only output format.
+/// JSON.
+///
+/// Callers check `ok` first — the envelope is the only output format.
 pub fn run(command: Command) -> String {
     let envelope = match command {
         Command::Version => serde_json::to_value(version_envelope()),
@@ -220,9 +230,6 @@ pub fn run(command: Command) -> String {
         } => {
             match resolve_config(config.as_deref()) {
                 Ok(resolved) => {
-                    // The gate always analyses the working directory, which is
-                    // what the CLI contract documents; an unavailable cwd
-                    // degrades to a relative "." rather than panicking.
                     let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     match check::run(&repo, &resolved, all, adopt) {
                         Ok(report) => {
@@ -276,7 +283,9 @@ fn spec_error_envelope(
 }
 
 /// A bad invocation must still emit the suite envelope — never clap's
-/// plain-text usage. JSON on stdout, exit non-zero (see [`exit_code`]).
+/// plain-text usage.
+///
+/// JSON on stdout, exit non-zero (see [`exit_code`]).
 pub fn argument_error_envelope(err: &clap::Error) -> String {
     let message = clap_error_message(err);
     serde_json::to_string(&spec_error_envelope(

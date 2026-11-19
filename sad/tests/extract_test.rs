@@ -305,7 +305,7 @@ fn pyi_stubs_are_analyzed_as_python() {
     );
 }
 
-// spec: Channel attribution / Lone-CR sources classify identically to LF sources.
+/// Channel attribution: lone-CR sources classify identically to LF sources.
 #[test]
 fn rust_lone_cr_classifies_identically_and_lines_are_counted() {
     let file = analyze("rust", "cr.rs");
@@ -330,13 +330,14 @@ fn rust_lone_cr_classifies_identically_and_lines_are_counted() {
     assert_eq!(node_at(&file, 6).body, "this function calculates the total");
 }
 
-// spec: Extraction / a pathological AST must not overflow the extract walk.
+/// A pathological AST must not overflow the extract walk.
+///
+/// The analysis runs on a deliberately tiny 128 KiB stack: the recursive
+/// walk this loop replaced exhausted a full thread stack inside 20k
+/// nesting, while the iterative walk keeps its pending set on the heap and
+/// the probe stack comfortably covers every other per-file cost.
 #[test]
 fn deeply_nested_trees_are_walked_without_recursing() {
-    // The analysis runs on a deliberately tiny stack: the recursive walk
-    // this loop replaced exhausted a full thread stack inside 20k nesting,
-    // while the iterative walk keeps its pending set on the heap and a
-    // 128 KiB stack comfortably covers every other per-file cost.
     let outcome = std::thread::Builder::new()
         .stack_size(128 * 1024)
         .spawn(|| {

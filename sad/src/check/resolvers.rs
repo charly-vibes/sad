@@ -203,6 +203,10 @@ mod tests {
     }
 }
 
+/// An existing ledger that cannot be decoded must fail the gate.
+///
+/// Silently disabling marker judgement would blame comments instead of the
+/// broken ledger; only a missing ledger is the documented no-op.
 #[test]
 fn existing_but_unreadable_ledger_fails_and_missing_is_a_no_op() {
     let dir = std::env::temp_dir().join(format!("sad-resolvers-{}", std::process::id()));
@@ -210,9 +214,6 @@ fn existing_but_unreadable_ledger_fails_and_missing_is_a_no_op() {
     std::fs::create_dir_all(dir.join(".beads")).unwrap();
     let ledger = dir.join(BEADS_LEDGER);
     std::fs::write(&ledger, b"\xff\xfe not utf-8").unwrap();
-    // An existing ledger that cannot be decoded must fail the gate:
-    // silently disabling marker judgement would blame comments instead
-    // of the broken ledger.
     let outcome = beads_context(&dir, true);
     assert!(outcome.is_err(), "expected GateFailure, got {outcome:?}");
     std::fs::remove_file(&ledger).unwrap();

@@ -328,7 +328,8 @@ fn apology_guidance_names_the_marker_channel() {
     );
 }
 
-// spec: Smell post-pass / Findings on one row from different runs keep their own smell.
+/// Smell post-pass: findings on one row from different runs keep their own
+/// smell.
 #[test]
 fn same_row_findings_from_different_runs_keep_their_own_smell() {
     let source = "function a() { /* Now: gather the widgets */ gather_widgets(); } \

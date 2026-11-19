@@ -204,10 +204,12 @@ fn uncommitted_new_files_are_analyzed_and_have_no_governing_revision() {
     );
 }
 
+/// Scenario: one lookup resolves a mixed candidate list.
+///
+/// Legacy files share a commit, an attributed file carries its own, and a
+/// never-committed file has none.
 #[test]
 fn governing_revisions_resolve_every_path_in_one_pass() {
-    // Scenario: One lookup resolves a mixed candidate list — legacy files
-    // sharing a commit, an attributed file, and a never-committed file.
     let repo = Repo::init("batch");
     repo.write_file("legacy_a.rs", "// legacy prose\n");
     repo.write_file("legacy_b.rs", "// legacy prose\n");
@@ -246,11 +248,12 @@ fn governing_revisions_resolve_every_path_in_one_pass() {
     );
 }
 
+/// Scenario: the gate runs from a subdirectory of the repository.
+///
+/// Candidates are relative to that directory, while git prints root-relative
+/// names unless asked otherwise.
 #[test]
 fn governing_revisions_resolve_paths_relative_to_the_invocation_directory() {
-    // Scenario: The gate may run from a subdirectory of the repository;
-    // candidates are relative to that directory, while git prints
-    // root-relative names unless asked otherwise.
     let repo = Repo::init("subdir");
     repo.write_file("crate/src/lib.rs", "// crate prose\n");
     repo.commit("crate baseline without trailer");
@@ -266,10 +269,11 @@ fn governing_revisions_resolve_paths_relative_to_the_invocation_directory() {
     );
 }
 
+/// Scenario: a directory that is not a git repository degrades gracefully.
+///
+/// Every path resolves to "no governing commit" instead of panicking.
 #[test]
 fn governing_revisions_degrade_when_git_history_is_unreadable() {
-    // Scenario: A directory that is not a git repository degrades every
-    // path to "no governing commit" instead of panicking.
     let serial = NEXT_REPO.fetch_add(1, Ordering::Relaxed);
     let plain =
         std::env::temp_dir().join(format!("sad-scope-nogit-{serial}-{}", std::process::id()));
@@ -285,9 +289,9 @@ fn governing_revisions_degrade_when_git_history_is_unreadable() {
     let _ = fs::remove_dir_all(&plain);
 }
 
+/// Scenario: a repository with no commits has no history to consult.
 #[test]
 fn governing_revisions_treat_an_empty_repository_as_uncommitted() {
-    // Scenario: A repository with no commits has no history to consult.
     let repo = Repo::init("empty-history");
 
     let revisions = governing_revisions(repo.path(), &paths(&["new.rs"]));

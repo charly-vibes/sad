@@ -176,6 +176,11 @@ impl TrailerScan {
 /// file named exactly 40 hex characters is indistinguishable from a commit
 /// hash and degrades to "no governing commit" — the path stays in scope
 /// either way.
+/// Parse notes: history output is bytes, not UTF-8 — only the hashes need
+/// decoding, so requested paths are matched as raw bytes against the
+/// stream. An entry opens with its 40-hex commit hash; the log format's
+/// newline reaches us as the first byte of the next token, which is then a
+/// file name.
 pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String, Option<String>> {
     let mut revisions: BTreeMap<String, Option<String>> = rel_paths
         .iter()
@@ -184,8 +189,6 @@ pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String
     if rel_paths.is_empty() {
         return revisions;
     }
-    // History output is bytes, not UTF-8; only the hashes need decoding, so
-    // requested paths are matched as raw bytes against the stream.
     let indices: BTreeMap<&[u8], usize> = rel_paths
         .iter()
         .enumerate()
@@ -207,9 +210,6 @@ pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String
     };
     let mut governing: Option<&str> = None;
     for token in output.stdout.split(|byte| *byte == 0) {
-        // An entry opens with its 40-hex commit hash; the log format's
-        // newline reaches us as the first byte of the next token, which is
-        // then a file name.
         if token.len() == 40 && token.iter().all(u8::is_ascii_hexdigit) {
             governing = std::str::from_utf8(token).ok();
             continue;
