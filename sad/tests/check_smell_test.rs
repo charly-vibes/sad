@@ -163,7 +163,7 @@ fn bare_temporary_is_unclassified_but_apology_shapes_are_errors() {
 #[test]
 fn a_resolving_marker_keeps_an_apology_out_of_the_error_set() {
     let cfg = Config::default();
-    let source = "function a() { /* Now: gather the widgets */ gather_widgets(); } function b() { /* TODO sad-xss: revisit this later */ return 2; }";
+    let source = "fn run() {\n    // workaround see sad-1\n    work();\n}\n";
     let file = analyze(
         "tests/fixtures/checks/smell/marked_apology.rs",
         source,
