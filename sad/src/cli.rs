@@ -65,6 +65,20 @@ pub enum Command {
         #[arg(long, value_name = "PATH")]
         config: Option<PathBuf>,
     },
+    /// Wire the sad gate into repository hook managers.
+    Hooks {
+        /// The hooks subcommand.
+        #[command(subcommand)]
+        command: HooksCommand,
+    },
+}
+
+/// The `sad hooks` subcommands.
+///
+#[derive(Debug, Subcommand)]
+pub enum HooksCommand {
+    /// Install the sad gate into lefthook's pre-commit and pre-push stages.
+    Install,
 }
 
 /// Data payload of the `sad version` envelope.
@@ -73,6 +87,57 @@ struct VersionData {
     name: &'static str,
     version: &'static str,
     status: &'static str,
+}
+
+/// Build the `sad hooks install` envelope: a successful command result
+/// carrying the per-stage outcomes, never findings.
+fn hooks_envelope(install: crate::hooks::HooksInstall) -> Envelope<crate::hooks::HooksInstall> {
+    Envelope::success(
+        env!("CARGO_PKG_VERSION"),
+        EnvelopeKind::Ok,
+        install,
+        vec![],
+        vec![],
+    )
+}
+
+/// Spec-traced failure envelope for a refused hook installation; the
+/// remediation names the concrete blocker (no repository, no lefthook
+/// config, or an unusable config) per Invariant 3.2.5.
+fn hooks_failure_envelope(error: &crate::hooks::lefthook::HooksError) -> serde_json::Value {
+    use crate::hooks::lefthook::HooksError;
+    let (message, remediation) = match error {
+        HooksError::NotInRepo { .. } => (
+            error.to_string(),
+            RemediationEntry {
+                command: "git init".into(),
+                description:
+                    "Hook wiring targets a git repository; run sad hooks install inside one.".into(),
+            },
+        ),
+        HooksError::Framework { message } => (
+            message.clone(),
+            RemediationEntry {
+                command: "lefthook init".into(),
+                description:
+                    "Create a lefthook.yml; sad wires managed blocks and never creates one.".into(),
+            },
+        ),
+        HooksError::Io { .. } => (
+            error.to_string(),
+            RemediationEntry {
+                command: "sad hooks install".into(),
+                description: "Fix the filesystem error and re-run the installer.".into(),
+            },
+        ),
+    };
+    spec_error_envelope(
+        "hooks_install_error",
+        &message,
+        None,
+        "cli",
+        vec![remediation],
+    )
 }
 
 fn version_envelope() -> Envelope<VersionData> {
@@ -237,6 +302,15 @@ pub fn run(command: Command) -> String {
             }
             Err((path, err)) => Ok(config_error_envelope(&path, &err)),
         },
+        Command::Hooks {
+            command: HooksCommand::Install,
+        } => {
+            let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match crate::hooks::lefthook::install(&repo) {
+                Ok(install) => serde_json::to_value(hooks_envelope(install)),
+                Err(error) => Ok(hooks_failure_envelope(&error)),
+            }
+        }
     };
     serde_json::to_string(&envelope.expect("envelope serialization cannot fail"))
         .expect("envelope serialization cannot fail")

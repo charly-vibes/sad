@@ -19,6 +19,7 @@ pub mod config;
 pub mod envelope;
 pub mod exemptions;
 pub mod extract;
+pub mod hooks;
 pub mod model;
 pub mod remediation;
 pub mod render;
