@@ -227,20 +227,16 @@ pub fn run(command: Command) -> String {
             adopt,
             strict,
             config,
-        } => {
-            match resolve_config(config.as_deref()) {
-                Ok(resolved) => {
-                    let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                    match check::run(&repo, &resolved, all, adopt) {
-                        Ok(report) => {
-                            serde_json::to_value(envelope::check_envelope(report, strict))
-                        }
-                        Err(failure) => Ok(gate_failure_envelope(&failure, config.as_deref())),
-                    }
+        } => match resolve_config(config.as_deref()) {
+            Ok(resolved) => {
+                let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                match check::run(&repo, &resolved, all, adopt) {
+                    Ok(report) => serde_json::to_value(envelope::check_envelope(report, strict)),
+                    Err(failure) => Ok(gate_failure_envelope(&failure, config.as_deref())),
                 }
-                Err((path, err)) => Ok(config_error_envelope(&path, &err)),
             }
-        }
+            Err((path, err)) => Ok(config_error_envelope(&path, &err)),
+        },
     };
     serde_json::to_string(&envelope.expect("envelope serialization cannot fail"))
         .expect("envelope serialization cannot fail")
