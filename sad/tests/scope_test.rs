@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use sad::config::Config;
-use sad::scope::{governing_revision, has_agent_trailer, select, select_in_scope};
+use sad::scope::{governing_revisions, has_agent_trailer, select, select_in_scope};
 
 static NEXT_REPO: AtomicUsize = AtomicUsize::new(0);
 
@@ -193,14 +193,108 @@ fn uncommitted_new_files_are_analyzed_and_have_no_governing_revision() {
         paths(&["untracked.rs"]),
         "new files must be treated as agent-authored until committed"
     );
+    let revisions = governing_revisions(repo.path(), &paths(&["untracked.rs", "legacy.rs"]));
     assert_eq!(
-        governing_revision(repo.path(), "untracked.rs"),
-        None,
+        revisions["untracked.rs"], None,
         "a never-committed path has no governing revision"
     );
     assert!(
-        governing_revision(repo.path(), "legacy.rs").is_some(),
+        revisions["legacy.rs"].is_some(),
         "a committed path has a governing revision"
+    );
+}
+
+#[test]
+fn governing_revisions_resolve_every_path_in_one_pass() {
+    // Scenario: One lookup resolves a mixed candidate list — legacy files
+    // sharing a commit, an attributed file, and a never-committed file.
+    let repo = Repo::init("batch");
+    repo.write_file("legacy_a.rs", "// legacy prose\n");
+    repo.write_file("legacy_b.rs", "// legacy prose\n");
+    repo.commit("legacy baseline without trailer");
+    let legacy_revision = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    repo.write_file("agent.rs", "// agent prose\n");
+    repo.commit("agent work\n\nAssisted-by: Claude");
+    let agent_revision = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+
+    repo.write_file("untracked.rs", "// fresh agent prose\n");
+
+    let revisions = governing_revisions(
+        repo.path(),
+        &paths(&["legacy_a.rs", "legacy_b.rs", "agent.rs", "untracked.rs"]),
+    );
+
+    assert_eq!(
+        revisions["legacy_a.rs"].as_deref(),
+        Some(legacy_revision.as_str()),
+        "the first legacy file resolves its own governing revision"
+    );
+    assert_eq!(
+        revisions["legacy_b.rs"].as_deref(),
+        Some(legacy_revision.as_str()),
+        "a second file of the same commit resolves that commit"
+    );
+    assert_eq!(
+        revisions["agent.rs"].as_deref(),
+        Some(agent_revision.as_str()),
+        "the newer attributed file resolves the newer commit"
+    );
+    assert_eq!(
+        revisions["untracked.rs"], None,
+        "a never-committed path has no governing revision"
+    );
+}
+
+#[test]
+fn governing_revisions_resolve_paths_relative_to_the_invocation_directory() {
+    // Scenario: The gate may run from a subdirectory of the repository;
+    // candidates are relative to that directory, while git prints
+    // root-relative names unless asked otherwise.
+    let repo = Repo::init("subdir");
+    repo.write_file("crate/src/lib.rs", "// crate prose\n");
+    repo.commit("crate baseline without trailer");
+    let revision = repo.git(&["rev-parse", "HEAD"]).trim().to_string();
+    let crate_dir = repo.path().join("crate");
+
+    let revisions = governing_revisions(&crate_dir, &paths(&["src/lib.rs"]));
+
+    assert_eq!(
+        revisions["src/lib.rs"].as_deref(),
+        Some(revision.as_str()),
+        "a subdirectory invocation resolves its own relative paths"
+    );
+}
+
+#[test]
+fn governing_revisions_degrade_when_git_history_is_unreadable() {
+    // Scenario: A directory that is not a git repository degrades every
+    // path to "no governing commit" instead of panicking.
+    let serial = NEXT_REPO.fetch_add(1, Ordering::Relaxed);
+    let plain =
+        std::env::temp_dir().join(format!("sad-scope-nogit-{serial}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&plain);
+    fs::create_dir_all(&plain).expect("creating a plain directory");
+
+    let revisions = governing_revisions(&plain, &paths(&["x.rs"]));
+
+    assert_eq!(
+        revisions["x.rs"], None,
+        "unreadable history must degrade to no governing commit"
+    );
+    let _ = fs::remove_dir_all(&plain);
+}
+
+#[test]
+fn governing_revisions_treat_an_empty_repository_as_uncommitted() {
+    // Scenario: A repository with no commits has no history to consult.
+    let repo = Repo::init("empty-history");
+
+    let revisions = governing_revisions(repo.path(), &paths(&["new.rs"]));
+
+    assert_eq!(
+        revisions["new.rs"], None,
+        "an empty history degrades to no governing commit"
     );
 }
 
@@ -273,7 +367,8 @@ fn nested_forward_slash_paths_and_trailing_slash_roots_work() {
         "a trailing slash on the repo root must not change scope"
     );
     assert!(
-        governing_revision(&root_with_slash, "src/deep/x.rs").is_some(),
+        governing_revisions(&root_with_slash, &paths(&["src/deep/x.rs"]))["src/deep/x.rs"]
+            .is_some(),
         "a trailing slash on the repo root must not hide the governing revision"
     );
 }
@@ -292,8 +387,9 @@ fn glob_metacharacters_in_paths_resolve_the_files_own_history() {
     repo.commit("unattributed sibling without trailer");
 
     let bracketed = "app/blog/[slug]/page.tsx";
+    let revisions = governing_revisions(repo.path(), &paths(&[bracketed]));
     assert_eq!(
-        governing_revision(repo.path(), bracketed).as_deref(),
+        revisions[bracketed].as_deref(),
         Some(agent_revision.as_str()),
         "a bracketed directory must resolve its own history, not a glob match"
     );

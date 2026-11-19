@@ -2,8 +2,8 @@
 //! commit history rather than from names, paths, or working-tree guesses.
 //! Responsibilities: parse git trailer blocks (final paragraph only, exact
 //! key match after the first separator), resolve the last commit that touched
-//! a repo-relative path, and select files for a default (attributed-only) run
-//! or a full `--all` run.
+//! each candidate path in a single git process, and select files for a
+//! default (attributed-only) run or a full `--all` run.
 //! Rationale: default scope is the adoption guard — it must analyze new agent
 //! work and skip untouched legacy prose. No-inference rule: attribution comes
 //! only from the explicit commit trailer configured as `attribution.trailer`;
@@ -23,9 +23,10 @@
 //!   unshallowed (that would need the network).
 //! - Commit messages are decoded lossily: invalid UTF-8 must not silently
 //!   hide a trailer. Only a git *failure* excludes a file.
-//! - Repository-level facts are resolved once per selection: the shallow
-//!   probe runs once and each revision's trailer verdict is memoised, so a
-//!   commit shared by many files is never re-read.
+//! - Repository-level facts are resolved once per selection and one git
+//!   process resolves every governing revision: the shallow probe runs once,
+//!   each revision's trailer verdict is memoised, and a full-history `git
+//!   log -z` pass replaces one process per candidate file.
 //! - Selection reports how each candidate was classified (attributed, no
 //!   governing commit, unattributed) so an empty scope is explainable rather
 //!   than indistinguishable from a clean tree; the counters never influence
@@ -162,26 +163,66 @@ impl TrailerScan {
     }
 }
 
-/// The full hash of the last commit that touched `rel_path`, or `None` when
-/// git has never recorded that path or any git invocation fails.
+/// The full hash of the last commit that touched each of `rel_paths`, or
+/// `None` for paths git has never recorded.
 ///
-/// `rel_path` is repo-relative and uses forward slashes; a failed lookup is
-/// reported as "no governing commit" so callers degrade instead of panicking.
-pub fn governing_revision(repo: &Path, rel_path: &str) -> Option<String> {
-    let output = git_command(repo)
-        .args(["log", "-1", "--no-show-signature", "--format=%H", "--"])
-        .arg(rel_path)
+/// One `git log` process resolves every path at once: history streams
+/// newest-first, so the first commit naming a path in the stream is its
+/// governing revision. A path absent from the stream, or any git failure,
+/// is reported as "no governing commit" so callers degrade instead of
+/// panicking. Paths are relative to `repo` (which may be a subdirectory of
+/// the actual repository; `--relative` keeps the stream in the same
+/// convention). `-z` framing keeps every byte of a path exact except that a
+/// file named exactly 40 hex characters is indistinguishable from a commit
+/// hash and degrades to "no governing commit" — the path stays in scope
+/// either way.
+pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String, Option<String>> {
+    let mut revisions: BTreeMap<String, Option<String>> = rel_paths
+        .iter()
+        .map(|rel_path| (rel_path.clone(), None))
+        .collect();
+    if rel_paths.is_empty() {
+        return revisions;
+    }
+    // History output is bytes, not UTF-8; only the hashes need decoding, so
+    // requested paths are matched as raw bytes against the stream.
+    let indices: BTreeMap<&[u8], usize> = rel_paths
+        .iter()
+        .enumerate()
+        .map(|(index, rel_path)| (rel_path.as_bytes(), index))
+        .collect();
+    let output = match git_command(repo)
+        .args([
+            "log",
+            "--no-show-signature",
+            "--format=%H",
+            "--name-only",
+            "--relative",
+            "-z",
+        ])
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return revisions,
+    };
+    let mut governing: Option<&str> = None;
+    for token in output.stdout.split(|byte| *byte == 0) {
+        // An entry opens with its 40-hex commit hash; the log format's
+        // newline reaches us as the first byte of the next token, which is
+        // then a file name.
+        if token.len() == 40 && token.iter().all(u8::is_ascii_hexdigit) {
+            governing = std::str::from_utf8(token).ok();
+            continue;
+        }
+        let Some(revision) = governing else { continue };
+        let path = token.strip_prefix(b"\n").unwrap_or(token);
+        if let Some(&index) = indices.get(path)
+            && let Some(slot @ None) = revisions.get_mut(&rel_paths[index])
+        {
+            *slot = Some(revision.to_string());
+        }
     }
-    let revision = std::str::from_utf8(&output.stdout).ok()?.trim();
-    if revision.is_empty() {
-        None
-    } else {
-        Some(revision.to_string())
-    }
+    revisions
 }
 
 /// Filter `files` down to the ones a gate run should analyse.
@@ -226,17 +267,18 @@ pub fn select_in_scope(repo: &Path, files: &[String], cfg: &Config, all: bool) -
 
     let trailer = cfg.attribution.trailer.as_str();
     let shallow = is_shallow_repository(repo);
+    let revisions = governing_revisions(repo, files);
     let mut verdicts: BTreeMap<String, bool> = BTreeMap::new();
     let mut selection = ScopeSelection::default();
     for file in files {
-        match governing_revision(repo, file) {
+        match &revisions[file.as_str()] {
             None => {
                 selection.files.push(file.clone());
                 selection.without_commit += 1;
             }
             Some(revision) => {
                 let attributed = *verdicts.entry(revision.clone()).or_insert_with(|| {
-                    governing_commit_has_trailer(repo, &revision, trailer, shallow)
+                    governing_commit_has_trailer(repo, revision, trailer, shallow)
                 });
                 if attributed {
                     selection.files.push(file.clone());
