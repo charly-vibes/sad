@@ -34,5 +34,7 @@ pre-push:
     typos:
       run: just typos
     test:
-      # Run only affected tests via testaruda --safe (falls back to cargo test)
-      run: testaruda select --safe --base origin/main --head HEAD
+      # Run only affected tests via testaruda --safe (falls back to cargo test).
+      # Exit 20 = "nothing affected, safe to skip" (TIA-CI-003) is tolerated;
+      # every other non-zero exit still fails the stage.
+      run: testaruda select --safe --base origin/main --head HEAD || test $? -eq 20
