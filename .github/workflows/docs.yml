@@ -12,6 +12,8 @@ on:
       - 'openspec/specs/**'
       - 'llms.txt'
       - 'llm.txt'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
