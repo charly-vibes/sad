@@ -14,5 +14,6 @@ pub mod baseline;
 pub mod commented_out_code;
 pub mod envelope;
 pub mod extract;
+pub mod hooks;
 pub mod prose;
 pub mod scope_repo;

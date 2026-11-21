@@ -11,48 +11,12 @@
 //! binary contract is locked at the CLI boundary, not the library seam.
 
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command as StdCommand;
 
-use assert_cmd::Command;
 use predicates::str;
 
-fn sad() -> Command {
-    Command::cargo_bin("sad").expect("sad binary builds")
-}
+use support::hooks::{Repo, lefthook_stub, sad};
 
-/// A throwaway git repository under the system temp directory.
-struct Repo(PathBuf);
-
-impl Repo {
-    fn init(label: &str) -> Self {
-        let path = std::env::temp_dir().join(format!("sad-hooks-{label}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&path);
-        fs::create_dir_all(&path).expect("creating fixture repository");
-        let repo = Self(path);
-        let status = StdCommand::new("git")
-            .current_dir(repo.0.clone())
-            .args(["init", "-q"])
-            .status()
-            .expect("git must be installed");
-        assert!(status.success(), "git init must succeed");
-        repo
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Repo {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn lefthook_stub() -> &'static str {
-    "pre-commit:\n  commands:\n    lint:\n      run: echo lint\n"
-}
+mod support;
 
 #[test]
 fn install_wires_the_sad_gate_into_both_stages() {
