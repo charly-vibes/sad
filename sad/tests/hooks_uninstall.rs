@@ -192,7 +192,9 @@ fn uninstall_refuses_a_block_outside_the_pinned_stages_without_editing() {
         .assert()
         .failure()
         .stdout(str::contains("\"ok\":false"))
-        .stdout(str::contains("outside the pre-commit/pre-push stages"));
+        .stdout(str::contains(
+            "does not match the pre-commit/pre-push stages",
+        ));
 
     let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
     assert_eq!(
@@ -217,6 +219,54 @@ fn uninstall_text_mode_names_noop_stages() {
         .stdout(str::contains("hooks uninstall"))
         .stdout(str::contains("pre-commit: not_wired"))
         .stdout(str::contains("pre-push: not_wired"));
+}
+
+/// Two sad blocks inside ONE pinned stage also mismatch the stage count:
+/// the guard refuses the ambiguous config instead of choosing a winner.
+#[test]
+fn uninstall_refuses_duplicate_blocks_in_one_stage_without_editing() {
+    let repo = Repo::init("duplicate");
+    let doubled = "pre-commit:\n  commands:\n# sad:managed:start\n    sad-check:\n      run: sad check\n# sad:managed:end\n# sad:managed:start\n    sad-check2:\n      run: sad check\n# sad:managed:end\n    lint:\n      run: echo lint\n";
+    fs::write(repo.path().join("lefthook.yml"), doubled).unwrap();
+
+    sad()
+        .args(["hooks", "uninstall", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .failure()
+        .stdout(str::contains("\"ok\":false"))
+        .stdout(str::contains(
+            "does not match the pre-commit/pre-push stages",
+        ));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    assert_eq!(
+        content, doubled,
+        "a refused run must not edit the config; got:\n{content}"
+    );
+}
+
+#[test]
+fn uninstall_unwires_a_single_wired_stage_and_reports_the_other_not_wired() {
+    let repo = Repo::init("single-stage");
+    let single = "pre-commit:\n  commands:\n# sad:managed:start\n    sad-check:\n      run: sad check\n# sad:managed:end\n    lint:\n      run: echo lint\n";
+    fs::write(repo.path().join("lefthook.yml"), single).unwrap();
+
+    sad()
+        .args(["hooks", "uninstall", "--json"])
+        .current_dir(repo.path())
+        .assert()
+        .success()
+        .stdout(str::contains("\"ok\":true"))
+        .stdout(str::contains("\"pre_commit\":\"removed\""))
+        .stdout(str::contains("\"pre_push\":\"not_wired\""));
+
+    let content = fs::read_to_string(repo.path().join("lefthook.yml")).unwrap();
+    assert_eq!(
+        content,
+        lefthook_stub(),
+        "unwiring must restore the wired stage byte-for-byte; got:\n{content}"
+    );
 }
 
 #[test]

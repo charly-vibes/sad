@@ -239,8 +239,9 @@ fn ensure_blocks_are_pinned(text: &str) -> Result<(), HooksError> {
         return Ok(());
     }
     Err(HooksError::Framework {
-        message: "sad:managed block outside the pre-commit/pre-push stages: sad hooks \
-                  uninstall unwires only the pinned stages and refuses to guess ownership"
+        message: "sad:managed block count does not match the pre-commit/pre-push stages: sad \
+                  hooks uninstall unwires exactly one block per pinned stage and refuses to \
+                  guess ownership"
             .into(),
     })
 }
