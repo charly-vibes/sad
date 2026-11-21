@@ -3,6 +3,18 @@
 All notable changes to sad. The format is loose — this project versions by
 milestone, not by cadence.
 
+## Unreleased
+
+- **Hook wiring** (sad-t7y, sad-pcn, sad-0j6): `sad hooks install` wires a
+  marker-owned managed block (`sad-check: run: sad check`) into lefthook's
+  pre-commit and pre-push stages — idempotent (`already_wired`), safe against
+  a doubled gate (`skipped_user_gate` when a stage already runs the gate
+  outside the block), and never creates a config. `sad hooks uninstall`
+  removes the block marker-guarded from both stages (`removed` /
+  `not_wired`), preserves foreign managed blocks byte-for-byte, and refuses
+  unbalanced markers or a block outside the pinned stages instead of
+  guessing. How-to: [Hook Wiring](docs/src/hooks.md).
+
 ## v0.2.0 — 2026-11-21
 
 - **Published to crates.io as `sad-vibes`** (sad-tiy): the registry's `sad`

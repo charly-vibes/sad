@@ -42,6 +42,7 @@ sad --version
 ```bash
 sad version [--json]   # tool identity as a genesis suite envelope
 sad check [--json] [--all] [--adopt] [--config <path>]   # documentation gate
+sad hooks install|uninstall [--json]   # wire/unwire the gate into lefthook stages
 ```
 
 Every command emits the suite JSON envelope — key fields `ok`, `data`,
@@ -74,8 +75,9 @@ defaults (see the [configuration table](gate-model.md#configuration-sadtoml)).
 
 ### Pre-commit hook
 
-Merge the command into your existing `pre-commit.commands` — do not add a
-second top-level `pre-commit` key:
+`sad hooks install` wires both stages for you ([Hook Wiring](hooks.md)).
+To manage the entry by hand instead, merge the command into your existing
+`pre-commit.commands` — do not add a second top-level `pre-commit` key:
 
 ```yaml
 sad-gate:
