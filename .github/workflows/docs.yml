@@ -75,6 +75,10 @@ jobs:
           path: book
 
   deploy:
+    # §6 (DDL-472): tag pushes build the version-injected book, but only
+    # main deploys — the github-pages environment policy allows main only
+    # (vampiro pattern).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
