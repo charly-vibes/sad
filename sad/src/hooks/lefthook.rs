@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use genesis::git_hooks::{self, lefthook::Stage};
 use genesis::managed_block::BlockDef;
 
-use crate::hooks::{HooksInstall, StageOutcome};
+use crate::hooks::{HooksInstall, HooksUninstall, StageOutcome, UninstallOutcome};
 
 /// The managed block's entries, nested inside a stage's `commands:` mapping
 /// at the commands-child indent (4 spaces).
@@ -142,17 +142,133 @@ fn set_outcome(install: &mut HooksInstall, stage: Stage, outcome: StageOutcome) 
     }
 }
 
-/// The lefthook config text genesis would wire, when one exists.
+/// Remove every sad-owned managed block from the repository containing
+/// `start`, in both pinned stages, and report what each stage became.
+///
+/// Removal is marker-guarded: only lines closed by the exact
+/// `sad:managed` markers disappear, foreign managed blocks survive
+/// byte-for-byte, and a config with unbalanced markers is refused instead
+/// of guessed at. A stage without the block is a no-op success
+/// (`not_wired`), mirroring genesis lifecycle semantics.
+pub fn uninstall(start: &Path) -> Result<HooksUninstall, HooksError> {
+    let root = git_hooks::repo_root_from(start)?;
+    let path = config_path(&root).ok_or_else(|| HooksError::Framework {
+        message: format!(
+            "no lefthook.yml under {}: sad hooks uninstall unwires the gate from lefthook and there is no config to unwire",
+            root.display()
+        ),
+    })?;
+    let text = std::fs::read_to_string(&path).map_err(|error| HooksError::Io {
+        path: path.clone(),
+        message: format!("cannot read lefthook config: {error}"),
+    })?;
+    let stripped = strip_sad_blocks(&text)?;
+    ensure_blocks_are_pinned(&text)?;
+    let mut uninstall = HooksUninstall {
+        pre_commit: UninstallOutcome::NotWired,
+        pre_push: UninstallOutcome::NotWired,
+    };
+    for stage in STAGES {
+        if stage_has_block(&text, stage.key()) {
+            set_uninstall_outcome(&mut uninstall, stage, UninstallOutcome::Removed);
+        }
+    }
+    if stripped != text {
+        std::fs::write(&path, &stripped).map_err(|error| HooksError::Io {
+            path: path.clone(),
+            message: format!("cannot write lefthook config: {error}"),
+        })?;
+    }
+    Ok(uninstall)
+}
+
+fn set_uninstall_outcome(uninstall: &mut HooksUninstall, stage: Stage, outcome: UninstallOutcome) {
+    match stage {
+        Stage::PreCommit => uninstall.pre_commit = outcome,
+        Stage::PrePush => uninstall.pre_push = outcome,
+    }
+}
+
+/// Strip every balanced `sad:managed` block, preserving every other byte.
+///
+/// Markers are matched exactly, so foreign managed blocks are never
+/// touched. A nested start marker, a stray end marker, or an unterminated
+/// block refuses the whole edit: uninstall never guesses where an
+/// unterminated block ends.
+fn strip_sad_blocks(text: &str) -> Result<String, HooksError> {
+    let unbalanced = || HooksError::Framework {
+        message: "unbalanced sad:managed markers in the lefthook config: sad hooks uninstall \
+                  removes only complete marker-guarded blocks and refuses to guess"
+            .into(),
+    };
+    let mut stripped = String::with_capacity(text.len());
+    let mut in_block = false;
+    for line in text.split_inclusive('\n') {
+        match line.trim_end() {
+            MANAGED_START if !in_block => in_block = true,
+            MANAGED_START => return Err(unbalanced()),
+            MANAGED_END if in_block => in_block = false,
+            MANAGED_END => return Err(unbalanced()),
+            _ if in_block => {}
+            _ => stripped.push_str(line),
+        }
+    }
+    if in_block {
+        return Err(unbalanced());
+    }
+    Ok(stripped)
+}
+
+/// Refuse a config whose balanced sad block sits outside both pinned
+/// stages.
+///
+/// Strip is global while outcomes are stage-scoped: a hand-edited block
+/// outside pre-commit/pre-push would otherwise mutate the file while
+/// every stage reports `not_wired`. Refusing mirrors the unbalanced
+/// marker convention — uninstall never guesses ownership.
+fn ensure_blocks_are_pinned(text: &str) -> Result<(), HooksError> {
+    let staged = STAGES
+        .iter()
+        .filter(|stage| stage_has_block(text, stage.key()))
+        .count();
+    let total = text
+        .lines()
+        .filter(|line| line.trim_end() == MANAGED_START)
+        .count();
+    if staged == total {
+        return Ok(());
+    }
+    Err(HooksError::Framework {
+        message: "sad:managed block outside the pre-commit/pre-push stages: sad hooks \
+                  uninstall unwires only the pinned stages and refuses to guess ownership"
+            .into(),
+    })
+}
+
+/// Whether the stage's section carries the sad managed block, matched as
+/// an exact trimmed line — the same predicate the strip and the guard
+/// use, so detection and removal can never disagree. A missing stage
+/// yields `false`, because there is nothing to unwire.
+fn stage_has_block(content: &str, stage_key: &str) -> bool {
+    stage_section(content, stage_key)
+        .is_some_and(|section| section.lines().any(|line| line.trim_end() == MANAGED_START))
+}
+
+/// The lefthook config genesis would wire, when one exists, as a path.
 ///
 /// Mirrors genesis's private `config_path` precedence (`lefthook.yml` wins
-/// over `lefthook.yaml`) so the guard and the injection always read the
-/// same file.
-fn config_text(root: &Path) -> Option<String> {
+/// over `lefthook.yaml`) so the guard, the injection, and the unwiring
+/// always read the same file.
+fn config_path(root: &Path) -> Option<PathBuf> {
     ["lefthook.yml", "lefthook.yaml"]
         .iter()
         .map(|name| root.join(name))
         .find(|path| path.is_file())
-        .and_then(|path| std::fs::read_to_string(path).ok())
+}
+
+/// The lefthook config text genesis would wire, when one exists.
+fn config_text(root: &Path) -> Option<String> {
+    config_path(root).and_then(|path| std::fs::read_to_string(path).ok())
 }
 
 /// Whether the stage's section already invokes the gate outside the

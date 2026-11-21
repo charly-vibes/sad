@@ -37,12 +37,24 @@ pub fn render_text(json: &str) -> String {
     }
 }
 
-/// One-line `hooks install` summary: the command and each stage outcome.
+/// One-line `hooks` summary: the command and each stage outcome.
+///
+/// The outcome vocabulary disambiguates the subcommand: `removed` and
+/// `not_wired` belong to uninstall, the install outcomes to install —
+/// text mode is a convenience rendering of the same envelope, so the
+/// command name derives from the data instead of duplicating it.
 fn hooks_text(v: &Value) -> Option<String> {
     let commit = v["data"]["pre_commit"].as_str()?;
     let push = v["data"]["pre_push"].as_str()?;
+    let uninstall =
+        matches!(commit, "removed" | "not_wired") || matches!(push, "removed" | "not_wired");
+    let command = if uninstall {
+        "sad hooks uninstall"
+    } else {
+        "sad hooks install"
+    };
     Some(format!(
-        "sad hooks install — pre-commit: {commit}; pre-push: {push}\n"
+        "{command} — pre-commit: {commit}; pre-push: {push}\n"
     ))
 }
 

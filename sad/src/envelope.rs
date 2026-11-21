@@ -17,12 +17,29 @@
 use std::fmt;
 use std::path::Path;
 
-use genesis::envelope::{Envelope, EnvelopeKind, Warning};
+use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry, Warning};
 use serde::Serialize;
 
 use crate::baseline::BaselineError;
 use crate::exemptions;
 use crate::model::{AnalyzedFile, AttributionClass, Finding, Severity, SuppressionEntry};
+
+/// The shared spec-traced error envelope: an error result carrying the
+/// named failure code, message, optional spec anchor, owning module, and
+/// non-empty remediation (Invariant 3.2.5), serialized as a genesis error
+/// envelope.
+pub(crate) fn spec_error_envelope(
+    code: &str,
+    message: &str,
+    spec: Option<&str>,
+    module: &str,
+    remediation: Vec<RemediationEntry>,
+) -> serde_json::Value {
+    let error = ErrorResult::new(code, message, None, spec, Some(module), vec![], remediation)
+        .expect("remediation is non-empty by construction (Invariant 3.2.5)");
+    serde_json::to_value(Envelope::error(env!("CARGO_PKG_VERSION"), error, vec![]))
+        .expect("envelope serialization cannot fail")
+}
 
 /// Machine-readable body of the `sad check` envelope.
 ///

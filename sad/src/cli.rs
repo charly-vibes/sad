@@ -17,7 +17,10 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
+use genesis::envelope::{Envelope, EnvelopeKind, RemediationEntry};
+
+use crate::envelope::spec_error_envelope;
+use crate::hooks::{hooks_envelope, hooks_failure_envelope, hooks_uninstall_envelope};
 use serde::Serialize;
 
 use crate::baseline::{self, BaselineError};
@@ -79,6 +82,8 @@ pub enum Command {
 pub enum HooksCommand {
     /// Install the sad gate into lefthook's pre-commit and pre-push stages.
     Install,
+    /// Remove the sad gate from lefthook's pre-commit and pre-push stages.
+    Uninstall,
 }
 
 /// Data payload of the `sad version` envelope.
@@ -87,57 +92,6 @@ struct VersionData {
     name: &'static str,
     version: &'static str,
     status: &'static str,
-}
-
-/// Build the `sad hooks install` envelope: a successful command result
-/// carrying the per-stage outcomes, never findings.
-fn hooks_envelope(install: crate::hooks::HooksInstall) -> Envelope<crate::hooks::HooksInstall> {
-    Envelope::success(
-        env!("CARGO_PKG_VERSION"),
-        EnvelopeKind::Ok,
-        install,
-        vec![],
-        vec![],
-    )
-}
-
-/// Spec-traced failure envelope for a refused hook installation; the
-/// remediation names the concrete blocker (no repository, no lefthook
-/// config, or an unusable config) per Invariant 3.2.5.
-fn hooks_failure_envelope(error: &crate::hooks::lefthook::HooksError) -> serde_json::Value {
-    use crate::hooks::lefthook::HooksError;
-    let (message, remediation) = match error {
-        HooksError::NotInRepo { .. } => (
-            error.to_string(),
-            RemediationEntry {
-                command: "git init".into(),
-                description:
-                    "Hook wiring targets a git repository; run sad hooks install inside one.".into(),
-            },
-        ),
-        HooksError::Framework { message } => (
-            message.clone(),
-            RemediationEntry {
-                command: "lefthook init".into(),
-                description:
-                    "Create a lefthook.yml; sad wires managed blocks and never creates one.".into(),
-            },
-        ),
-        HooksError::Io { .. } => (
-            error.to_string(),
-            RemediationEntry {
-                command: "sad hooks install".into(),
-                description: "Fix the filesystem error and re-run the installer.".into(),
-            },
-        ),
-    };
-    spec_error_envelope(
-        "hooks_install_error",
-        &message,
-        None,
-        "cli",
-        vec![remediation],
-    )
 }
 
 fn version_envelope() -> Envelope<VersionData> {
@@ -302,18 +256,35 @@ pub fn run(command: Command) -> String {
             }
             Err((path, err)) => Ok(config_error_envelope(&path, &err)),
         },
-        Command::Hooks {
-            command: HooksCommand::Install,
-        } => {
-            let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            match crate::hooks::lefthook::install(&repo) {
-                Ok(install) => serde_json::to_value(hooks_envelope(install)),
-                Err(error) => Ok(hooks_failure_envelope(&error)),
-            }
-        }
+        Command::Hooks { command } => hooks_command_envelope(command),
     };
     serde_json::to_string(&envelope.expect("envelope serialization cannot fail"))
         .expect("envelope serialization cannot fail")
+}
+
+/// Drive a `sad hooks` subcommand and serialize its outcome: the per-stage
+/// envelope on success, the spec-traced refusal naming the subcommand
+/// otherwise.
+fn hooks_command_envelope(command: HooksCommand) -> serde_json::Result<serde_json::Value> {
+    let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    match command {
+        HooksCommand::Install => match crate::hooks::lefthook::install(&repo) {
+            Ok(install) => serde_json::to_value(hooks_envelope(install)),
+            Err(error) => Ok(hooks_failure_envelope(
+                &error,
+                "hooks_install_error",
+                "sad hooks install",
+            )),
+        },
+        HooksCommand::Uninstall => match crate::hooks::lefthook::uninstall(&repo) {
+            Ok(uninstall) => serde_json::to_value(hooks_uninstall_envelope(uninstall)),
+            Err(error) => Ok(hooks_failure_envelope(
+                &error,
+                "hooks_uninstall_error",
+                "sad hooks uninstall",
+            )),
+        },
+    }
 }
 
 /// Human-readable one-line message from a clap error:
@@ -334,22 +305,6 @@ fn clap_error_message(err: &clap::Error) -> String {
         .unwrap_or(&rendered)
         .trim_start_matches("error: ");
     paragraph.lines().collect::<Vec<_>>().join(" ")
-}
-
-/// Spec-traced error envelope: one construction point for every error
-/// path, so Invariant 3.2.5 (non-empty remediation) holds by construction
-/// — the `ErrorResult::new` constructor itself rejects an empty list.
-fn spec_error_envelope(
-    code: &str,
-    message: &str,
-    spec: Option<&str>,
-    module: &str,
-    remediation: Vec<RemediationEntry>,
-) -> serde_json::Value {
-    let error = ErrorResult::new(code, message, None, spec, Some(module), vec![], remediation)
-        .expect("remediation is non-empty by construction (Invariant 3.2.5)");
-    serde_json::to_value(Envelope::error(env!("CARGO_PKG_VERSION"), error, vec![]))
-        .expect("envelope serialization cannot fail")
 }
 
 /// A bad invocation must still emit the suite envelope — never clap's

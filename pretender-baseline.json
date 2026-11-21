@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "adopted_at": "2026-11-19T20:57:48Z",
+  "adopted_at": "2026-11-21T17:46:21Z",
   "finding_ids": [
     "sad/tests/check_cli_test.rs::check_accepts_all_and_adopt_flags::min_assertions",
     "sad/tests/check_cli_test.rs::check_discovers_sad_toml_from_the_working_directory::min_assertions",
@@ -23,6 +23,8 @@
     "sad/tests/extract_test.rs::python_string_literals_do_not_become_comment_nodes::min_assertions",
     "sad/tests/extract_test.rs::rust_string_literals_do_not_become_comment_nodes::min_assertions",
     "sad/tests/extract_test.rs::typescript_string_and_template_literals_do_not_become_comment_nodes::min_assertions",
-    "sad/tests/hooks_install.rs::install_text_mode_names_the_stages::min_assertions"
+    "sad/tests/hooks_install.rs::install_text_mode_names_the_stages::min_assertions",
+    "sad/tests/hooks_uninstall.rs::uninstall_text_mode_names_noop_stages::min_assertions",
+    "sad/tests/hooks_uninstall.rs::uninstall_text_mode_names_the_stages::min_assertions"
   ]
 }
