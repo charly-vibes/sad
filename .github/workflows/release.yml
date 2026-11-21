@@ -5,11 +5,13 @@
 # then auto-updates the homebrew-charly tap formula and scoop-charly bucket manifest.
 #
 # Required secrets:
-#   GITHUB_TOKEN        - automatically provided by GitHub Actions
-#   TAP_GITHUB_TOKEN    - PAT with repo write access to homebrew-charly and scoop-charly
+#   GITHUB_TOKEN          - automatically provided by GitHub Actions
+#   TAP_GITHUB_TOKEN      - PAT with repo write access to homebrew-charly and scoop-charly
+#   CARGO_REGISTRY_TOKEN  - crates.io API token for publishing the crate
 #
-# No crates.io publish: the registry's `sad` name belongs to an unrelated
-# 2021 placeholder crate, so sad ships binaries, Homebrew, and Scoop only.
+# The crate publishes as `sad-vibes` — the registry's `sad` name belongs to
+# an unrelated 2021 placeholder crate. Binaries, Homebrew, and Scoop keep
+# the plain `sad` name.
 
 name: Release
 
@@ -216,6 +218,11 @@ jobs:
             dist/provenance.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to crates.io
+        run: cargo publish --locked --manifest-path sad/Cargo.toml
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Update Homebrew tap
         # Package-manager distribution is independent of the GitHub release

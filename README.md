@@ -49,6 +49,12 @@ scoop bucket add charly https://github.com/charly-vibes/scoop-charly
 scoop install sad
 ```
 
+From crates.io:
+
+```sh
+cargo install sad-vibes
+```
+
 From source:
 
 ```bash

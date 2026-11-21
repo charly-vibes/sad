@@ -1,13 +1,16 @@
 [package]
-name = "sad"
+name = "sad-vibes"
 version = "0.2.0"
 edition = "2024"
 description = "Documentation gate — code should speak for itself; prose means refactor"
 license = "Apache-2.0"
 repository = "https://github.com/charly-vibes/sad"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["cli", "documentation", "code-quality", "gates", "charly-vibes"]
 categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "sad"
 
 [[bin]]
 name = "sad"

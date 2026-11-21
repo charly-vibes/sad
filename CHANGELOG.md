@@ -3,8 +3,13 @@
 All notable changes to sad. The format is loose — this project versions by
 milestone, not by cadence.
 
-## v0.2.0 — unreleased
+## v0.2.0 — 2026-11-21
 
+- **Published to crates.io as `sad-vibes`** (sad-tiy): the registry's `sad`
+  name belongs to an unrelated 2021 placeholder crate, so the package takes
+  the `sad-vibes` name while the lib/bin targets keep `sad` (genesis
+  convention). Tagged releases now run `cargo publish --locked` alongside
+  the binary archives.
 - **Marker id consistency** (sad-o41): `unresolvable_marker` now extracts
   the cited id with the same attribution extractor that classified the
   node, so `see sad-lcy-` or `see sad-lcy(sic)` is judged as `sad-lcy`

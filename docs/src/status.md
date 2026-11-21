@@ -15,7 +15,7 @@ six checks (`comment_outside_channel`, `commented_out_code`,
 scoping; genesis `check` envelope;
 `--adopt` baseline with shrink-only re-adoption. The repository dogfoods it
 (`sad.toml`, `sad-baseline.json`); `just ci` runs the gate through its
-`self-gate` recipe (`cargo run -q --package sad -- check --all`), not as a
+`self-gate` recipe (`cargo run -q --package sad-vibes -- check --all`), not as a
 pre-commit hook.
 
 The **gate design** is specified — see the [Gate Model](gate-model.md). The

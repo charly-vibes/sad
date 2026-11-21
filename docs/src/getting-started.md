@@ -94,7 +94,7 @@ install comes from the git repository:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install sad
-        run: cargo install --git https://github.com/charly-vibes/sad --locked --package sad
+        run: cargo install --git https://github.com/charly-vibes/sad --locked --package sad-vibes
       - name: sad gate
         run: sad check --all
 ```

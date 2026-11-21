@@ -102,7 +102,7 @@ structure-check:
 
 # Dogfood: sad gates its own tree against sad-baseline.json.
 self-gate:
-    cargo run -q --package sad -- check --all
+    cargo run -q --package sad-vibes -- check --all
 
 # Full CI gate: fmt + type-check + lint + tests + spec correspondence +
 # structural gate + self-gate + spelling
