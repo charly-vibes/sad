@@ -30,6 +30,7 @@ use crate::config::{Config, ConfigError};
 use crate::{check, commands, envelope};
 
 pub use crate::feedback_cmd::record_last_error_from_envelope;
+pub use commands::{maybe_print_version_json, run_completions, run_doctor_human};
 
 use commands::CheckArgs;
 
