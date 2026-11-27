@@ -159,7 +159,7 @@ jobs:
           tar -czf "dist/sad_${VERSION}_darwin_amd64.tar.gz" -C bins/darwin_amd64 sad
           tar -czf "dist/sad_${VERSION}_darwin_arm64.tar.gz" -C bins/darwin_arm64 sad
           (cd bins/windows_amd64 && zip "../../dist/sad_${VERSION}_windows_amd64.zip" sad.exe)
-          cd dist && sha256sum *.tar.gz *.zip > checksums.txt
+          cd dist && sha256sum ./*.tar.gz ./*.zip > checksums.txt
 
       # Publish cryptographically verifiable provenance for every supported
       # binary. provenance.json binds each artifact's sha256 to the
@@ -233,6 +233,10 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "::notice::Homebrew tap update skipped (TAP_GITHUB_TOKEN not set)."
+            exit 1
+          fi
           git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/homebrew-charly.git" /tmp/tap
           python3 scripts/update-homebrew.py \
             /tmp/tap/Formula/sad.rb \
@@ -251,6 +255,10 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${{ steps.pkg.outputs.version }}"
+          if [ -z "${TAP_GITHUB_TOKEN}" ]; then
+            echo "::notice::Scoop bucket update skipped (TAP_GITHUB_TOKEN not set)."
+            exit 1
+          fi
           git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/charly-vibes/scoop-charly.git" /tmp/scoop
           python3 scripts/update-scoop.py \
             /tmp/scoop/bucket/sad.json \
