@@ -81,6 +81,14 @@ jobs:
         run: kaya check --index
       - name: Check record lag
         run: python3 scripts/record-lag.py
+      # Book link check (sad-9sg.6): the built artifact must not ship a
+      # relative link that escapes `book/` (kaya pattern).
+      - name: Install mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: latest
+      - name: Check book links
+        run: just record-links
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

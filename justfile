@@ -79,9 +79,13 @@ typos:
 doc:
     cargo doc --no-deps --open
 
-# Build user-facing docs (requires: cargo install mdbook)
+# Build user-facing docs (requires: cargo install mdbook).
+# The generated publication and research trees are rendered into the artifact
+# beside the book (kaya pattern) — they must stay build outputs, never copies
+# under docs/src.
 book:
     mdbook build
+    python3 scripts/build-publications.py
 
 # Serve docs locally with live reload (requires: cargo install mdbook)
 book-serve:
@@ -144,3 +148,7 @@ record-verify:
 # the bound since the last capture frontier (kaya check + git rev-list).
 record-lag mode="fail" bound="60":
 	python3 scripts/record-lag.py --mode {{mode}} --bound {{bound}}
+
+# Fail when the built book contains a relative link the artifact cannot resolve
+record-links: book
+	python3 scripts/check-links.py

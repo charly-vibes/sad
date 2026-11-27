@@ -25,5 +25,9 @@ EARS spec is deployed at
 `.espectacular/comment-gate/`). Ticket `sad-lcy` is closed. Live command surface:
 `sad version` and `sad check [--all] [--adopt] [--strict] [--config <path>] [--json]`.
 Measurement duty and first published rates: [Validation](validation.md).
+The kaya-compiled record ships with the book: the client-facing
+[publication overview](public/overview.md) and the
+[research dossier](research/index.md) (rendered at build time by
+`scripts/build-publications.py`).
 Implementation history lives in
 [CHANGELOG](https://github.com/charly-vibes/sad/blob/main/CHANGELOG.md).
