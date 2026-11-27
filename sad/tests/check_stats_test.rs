@@ -70,11 +70,9 @@ fn scope_uses_commit_attribution() {
     git(repo.path(), &["init", "--quiet"]);
     commit_file(
         repo.path(),
-        "attributed.rs",
-        "add attributed file",
-        Some("Assisted-by: Claude"),
+        Commit::new("attributed.rs", "add attributed file").trailer("Assisted-by: Claude"),
     );
-    commit_file(repo.path(), "legacy.rs", "add legacy file", None);
+    commit_file(repo.path(), Commit::new("legacy.rs", "add legacy file"));
 
     let (code, scoped) = run_json(repo.path(), &["check", "--json"]);
     assert_eq!(code, 0);
@@ -230,7 +228,7 @@ fn scope_counts_explain_a_zero_selection_run() {
     let repo = TempRepo::new("scope-zero");
     repo.copy_fixture("plain.rs", "src/lib.rs");
     git(repo.path(), &["init", "--quiet"]);
-    commit_file(repo.path(), "src/lib.rs", "add legacy file", None);
+    commit_file(repo.path(), Commit::new("src/lib.rs", "add legacy file"));
 
     repo.write("src/lib.rs", "// ONLY an uncommitted edit\nfn main() {}\n");
 

@@ -35,38 +35,55 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
         return Vec::new();
     }
     let cap = cfg.doc_summary_cap;
-    let nodes = &file.nodes;
-    let mut findings = Vec::new();
-    let mut start = 0;
-    while start < nodes.len() {
-        if nodes[start].class != AttributionClass::Doc {
-            start += 1;
-            continue;
-        }
-        let end = block_end(nodes, start);
-        let block = &nodes[start..end];
-        let count = sentence_count(&summary_lead(block));
-        if count > cap {
-            let node = &block[0];
-            let body = block_body(block);
-            findings.push(Finding {
-                check: FindingKind::DocSummaryCapExceeded,
-                id: finding_id(&file.path, &node.symbol_path, &body),
-                path: file.path.clone(),
-                line: node.line,
-                symbol_path: node.symbol_path.clone(),
-                message: format!(
-                    "doc summary lead spans {count} sentences, exceeding the {cap}-sentence doc_summary_cap"
-                ),
-                text: body,
-                severity: Severity::Warning,
-                smell: Some(Smell::DocCap),
-                remediation: remediation::for_smell(Smell::DocCap, &file.path),
-            });
-        }
-        start = end;
+    doc_blocks(&file.nodes)
+        .iter()
+        .filter_map(|block| {
+            let count = sentence_count(&summary_lead(block));
+            (count > cap).then(|| block_finding(file, block, cap))
+        })
+        .collect()
+}
+
+/// Every documentation block in `nodes`, as the slices of consecutive
+/// doc-class nodes sharing their first node's `symbol_path`.
+///
+/// A block starts at a doc node whose predecessor is not a doc node naming
+/// the same item, so the blocks partition the doc nodes exactly as the
+/// advancing start/end scan did.
+fn doc_blocks(nodes: &[CommentNode]) -> Vec<&[CommentNode]> {
+    nodes
+        .iter()
+        .enumerate()
+        .filter(|&(index, node)| {
+            node.class == AttributionClass::Doc
+                && !(index > 0
+                    && nodes[index - 1].class == AttributionClass::Doc
+                    && nodes[index - 1].symbol_path == node.symbol_path)
+        })
+        .map(|(index, _)| &nodes[index..block_end(nodes, index)])
+        .collect()
+}
+
+/// The `doc_summary_cap_exceeded` finding for one doc block whose summary
+/// lead exceeds a cap of `cap`.
+fn block_finding(file: &AnalyzedFile, block: &[CommentNode], cap: usize) -> Finding {
+    let node = &block[0];
+    let body = block_body(block);
+    let count = sentence_count(&summary_lead(block));
+    Finding {
+        check: FindingKind::DocSummaryCapExceeded,
+        id: finding_id(&file.path, &node.symbol_path, &body),
+        path: file.path.clone(),
+        line: node.line,
+        symbol_path: node.symbol_path.clone(),
+        message: format!(
+            "doc summary lead spans {count} sentences, exceeding the {cap}-sentence doc_summary_cap"
+        ),
+        text: body,
+        severity: Severity::Warning,
+        smell: Some(Smell::DocCap),
+        remediation: remediation::for_smell(Smell::DocCap, &file.path),
     }
-    findings
 }
 
 /// Exclusive end of the documentation block starting at `start`: the run of
@@ -78,14 +95,14 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
 /// `start`, so the caller's scan always advances.
 fn block_end(nodes: &[CommentNode], start: usize) -> usize {
     let symbol = nodes[start].symbol_path.as_str();
-    let mut end = start + 1;
-    while end < nodes.len()
-        && nodes[end].class == AttributionClass::Doc
-        && nodes[end].symbol_path.as_str() == symbol
-    {
-        end += 1;
-    }
-    end
+    start
+        + 1
+        + nodes[start + 1..]
+            .iter()
+            .take_while(|node| {
+                node.class == AttributionClass::Doc && node.symbol_path.as_str() == symbol
+            })
+            .count()
 }
 
 /// Join one doc block's node bodies with `\n`, restoring the line structure
@@ -93,14 +110,11 @@ fn block_end(nodes: &[CommentNode], start: usize) -> usize {
 ///
 /// Only called when a finding is emitted, so the clean path allocates nothing.
 fn block_body(block: &[CommentNode]) -> String {
-    let mut body = String::new();
-    for (offset, node) in block.iter().enumerate() {
-        if offset > 0 {
-            body.push('\n');
-        }
-        body.push_str(&node.body);
-    }
-    body
+    block
+        .iter()
+        .map(|node| node.body.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The summary lead of a doc block: the non-empty body lines before the first
@@ -111,20 +125,13 @@ fn block_body(block: &[CommentNode]) -> String {
 /// retains its block-comment gutter still ends its summary where a reader
 /// would see the blank separator.
 fn summary_lead(block: &[CommentNode]) -> String {
-    let mut lead = String::new();
-    for node in block {
-        for line in node.body.split('\n') {
-            let line = line.trim();
-            if line.is_empty() || line == "*" {
-                return lead;
-            }
-            if !lead.is_empty() {
-                lead.push(' ');
-            }
-            lead.push_str(line);
-        }
-    }
-    lead
+    block
+        .iter()
+        .flat_map(|node| node.body.split('\n'))
+        .map(str::trim)
+        .take_while(|line| !line.is_empty() && *line != "*")
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Number of sentences in the summary lead, with inline code spans, URLs,
@@ -138,28 +145,47 @@ fn sentence_count(lead: &str) -> usize {
         return 0;
     }
     let chars = mask_lead(lead);
-    let mut count = 0;
-    let mut index = 0;
-    while index < chars.len() {
-        if !matches!(chars[index], '.' | '!' | '?') {
-            index += 1;
-            continue;
-        }
-        let mut end = index + 1;
-        while end < chars.len() && matches!(chars[end], '.' | '!' | '?') {
-            end += 1;
-        }
-        let mut next = end;
-        while next < chars.len() && chars[next].is_whitespace() {
-            next += 1;
-        }
-        let boundary = next == chars.len() || (next > end && starts_sentence(chars[next]));
-        if boundary {
-            count += 1;
-        }
-        index = end;
-    }
+    let count = (0..chars.len())
+        .filter(|&index| {
+            sentence_punct(chars[index]) && (index == 0 || !sentence_punct(chars[index - 1]))
+        })
+        .filter(|&index| boundary_after(&chars, index))
+        .count();
     count.max(1)
+}
+
+/// Whether `c` is a terminal punctuation character.
+fn sentence_punct(c: char) -> bool {
+    matches!(c, '.' | '!' | '?')
+}
+
+/// Whether the punctuation run opening at `index` ends a sentence.
+///
+/// A boundary is whitespace plus an uppercase character, digit, or opening
+/// quote/bracket, or the end of the lead.
+fn boundary_after(chars: &[char], index: usize) -> bool {
+    let end = punctuation_run_end(chars, index);
+    let next = next_non_whitespace(chars, end);
+    next == chars.len() || (next > end && starts_sentence(chars[next]))
+}
+
+/// End of the punctuation run that begins at `start`.
+fn punctuation_run_end(chars: &[char], start: usize) -> usize {
+    start
+        + chars[start..]
+            .iter()
+            .take_while(|c| sentence_punct(**c))
+            .count()
+}
+
+/// Index of the first non-whitespace character at or after `start`, or the
+/// length of `chars` when only whitespace follows.
+fn next_non_whitespace(chars: &[char], start: usize) -> usize {
+    start
+        + chars[start..]
+            .iter()
+            .position(|c| !c.is_whitespace())
+            .unwrap_or(chars.len() - start)
 }
 
 /// Whether `c` can open the sentence that follows a boundary.
@@ -183,13 +209,19 @@ fn mask_lead(lead: &str) -> Vec<char> {
     chars
 }
 
+/// Scan `chars` left to right; `mask_at` blanks the span opening at each
+/// position and returns the next index to scan.
+fn mask_spans(chars: &mut [char], mask_at: impl Fn(&mut [char], usize) -> usize) {
+    let mut index = 0;
+    while index < chars.len() {
+        index = mask_at(chars, index);
+    }
+}
+
 /// Mask every inline code span, backticks included; an unmatched backtick
 /// stays literal.
 fn mask_code_spans(chars: &mut [char]) {
-    let mut index = 0;
-    while index < chars.len() {
-        index = mask_code_span_at(chars, index);
-    }
+    mask_spans(chars, mask_code_span_at);
 }
 
 /// Mask the code span opening at `start` when a closing backtick follows, and
@@ -213,10 +245,7 @@ fn closing_backtick(chars: &[char], start: usize) -> Option<usize> {
 
 /// Mask every `http://` or `https://` token up to the next whitespace.
 fn mask_urls(chars: &mut [char]) {
-    let mut index = 0;
-    while index < chars.len() {
-        index = mask_url_at(chars, index);
-    }
+    mask_spans(chars, mask_url_at);
 }
 
 /// Mask the URL starting at `start`, if any, and return the next index.
@@ -254,10 +283,7 @@ const ABBREVIATIONS: [&str; 6] = ["e.g.", "i.e.", "etc.", "vs.", "cf.", "approx.
 
 /// Mask every known abbreviation token.
 fn mask_abbreviations(chars: &mut [char]) {
-    let mut index = 0;
-    while index < chars.len() {
-        index = mask_abbreviation_at(chars, index);
-    }
+    mask_spans(chars, mask_abbreviation_at);
 }
 
 /// Mask the abbreviation starting at `start`, if any, and return the next
@@ -282,10 +308,7 @@ fn abbreviation_len(chars: &[char], start: usize) -> Option<usize> {
 
 /// Mask every version token such as `1.2` or `v3.0.1`.
 fn mask_versions(chars: &mut [char]) {
-    let mut index = 0;
-    while index < chars.len() {
-        index = mask_version_at(chars, index);
-    }
+    mask_spans(chars, mask_version_at);
 }
 
 /// Mask the version token starting at `start`, if any, and return the next

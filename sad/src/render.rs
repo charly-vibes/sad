@@ -72,16 +72,8 @@ fn check_text(v: &Value) -> String {
     if let Some(clause) = first_finding_clause(&v["data"]["findings"], ok) {
         line.push_str(&clause);
     }
-    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
-    let selected = stats["files_selected"].as_u64().unwrap_or(files);
-    let unattributed = stats["files_unattributed"].as_u64().unwrap_or(0);
-    if selected == 0 && unattributed > 0 {
-        line.push_str(&format!(
-            "; attribution scope excluded {} {}: commit with the configured trailer or run \
-             `sad check --all`",
-            unattributed,
-            plural(unattributed, "file"),
-        ));
+    if let Some(clause) = attribution_clause(stats) {
+        line.push_str(&clause);
     }
     if let Some(suffix) = skipped_suffix(&v["warnings"], "unreadable_source", "file", true) {
         line.push_str(&suffix);
@@ -96,6 +88,24 @@ fn check_text(v: &Value) -> String {
     }
     line.push('\n');
     line
+}
+
+/// The attribution hint when nothing was selected but files went
+/// unattributed; `None` when the attribution scope excluded nothing.
+fn attribution_clause(stats: &Value) -> Option<String> {
+    let files = stats["files_analyzed"].as_u64().unwrap_or(0);
+    let selected = stats["files_selected"].as_u64().unwrap_or(files);
+    let unattributed = stats["files_unattributed"].as_u64().unwrap_or(0);
+    if selected == 0 && unattributed > 0 {
+        Some(format!(
+            "; attribution scope excluded {} {}: commit with the configured trailer or run \
+             `sad check --all`",
+            unattributed,
+            plural(unattributed, "file"),
+        ))
+    } else {
+        None
+    }
 }
 
 /// The verdict and count prefix: pass or fail, the severity counts, and the

@@ -44,16 +44,15 @@ pub(super) fn is_commented_out_code(root: Node<'_>, language: Language) -> bool 
 
 /// Rule 1: no `ERROR` node and no node flagged missing anywhere in the tree.
 fn clean_tree(root: Node<'_>) -> bool {
-    let mut stack = vec![root];
-    while let Some(node) = stack.pop() {
-        if node.is_error() || node.is_missing() {
-            return false;
-        }
-        let mut cursor = node.walk();
-        let children: Vec<Node<'_>> = node.children(&mut cursor).collect();
-        stack.extend(children);
+    if root.is_error() || root.is_missing() {
+        return false;
     }
-    true
+    (0..root.child_count()).all(|index| {
+        clean_tree(
+            root.child(index)
+                .expect("child_count bounds the child index"),
+        )
+    })
 }
 
 /// The root's named children with comment nodes ignored.
@@ -112,8 +111,8 @@ mod tests {
     use crate::extract::parser_for;
 
     fn fires(language: Language, body: &str) -> bool {
-        let mut parser = parser_for(language).expect("grammar is pinned");
-        let tree = parser
+        let tree = parser_for(language)
+            .expect("grammar is pinned")
             .parse(body, None)
             .expect("tree-sitter parses the body");
         is_commented_out_code(tree.root_node(), language)

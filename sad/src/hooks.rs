@@ -96,8 +96,17 @@ pub(crate) fn hooks_failure_envelope(
     kind: &str,
     command: &str,
 ) -> serde_json::Value {
+    let (message, remediation) = failure_parts(error, command);
+    spec_error_envelope(kind, &message, "cli", vec![remediation])
+}
+
+/// The message and single remediation naming the concrete blocker (no
+/// repository, no lefthook config, or an unusable config) per Invariant
+/// 3.2.5; `command` carries the calling subcommand into the remediation so
+/// each refusal traces to its own surface.
+fn failure_parts(error: &lefthook::HooksError, command: &str) -> (String, RemediationEntry) {
     use lefthook::HooksError;
-    let (message, remediation) = match error {
+    match error {
         HooksError::NotInRepo { .. } => (
             error.to_string(),
             RemediationEntry {
@@ -122,6 +131,5 @@ pub(crate) fn hooks_failure_envelope(
                 description: "Fix the filesystem error and re-run the command.".into(),
             },
         ),
-    };
-    spec_error_envelope(kind, &message, None, "cli", vec![remediation])
+    }
 }

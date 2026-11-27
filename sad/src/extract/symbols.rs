@@ -6,6 +6,8 @@
 //! Rationale: symbolic attribution must use an explicit allowlist so member
 //! reordering inside containers does not churn finding IDs.
 
+use std::iter::successors;
+
 use tree_sitter::Node;
 
 use crate::model::Language;
@@ -22,16 +24,12 @@ pub(crate) fn symbol_path(node: Node<'_>, language: Language, source: &str) -> S
 
 /// Ancestor chain joined by `::`, outermost first.
 fn ancestor_names<'a>(from: Option<Node<'_>>, language: Language, source: &'a str) -> Vec<&'a str> {
-    let mut names = Vec::new();
-    let mut current = from;
-    while let Some(node) = current {
-        if let Some(name) = ancestor_name(node, language, source) {
-            names.push(name);
-        }
-        current = node.parent();
-    }
-    names.reverse();
-    names
+    successors(from, Node::parent)
+        .filter_map(|node| ancestor_name(node, language, source))
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect()
 }
 
 fn join_chain(names: Vec<&str>) -> String {
@@ -71,33 +69,30 @@ fn documented_symbol_path(node: Node<'_>, language: Language, source: &str) -> O
 /// First sibling that is neither a comment nor an attribute: the item a doc
 /// comment directly documents.
 fn next_item<'tree>(node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
-    let mut current = node.next_named_sibling();
-    while let Some(sibling) = current {
-        let skip = match language {
-            Language::Rust => matches!(
+    let skippable: fn(Node<'tree>) -> bool = match language {
+        Language::Rust => |sibling| {
+            matches!(
                 sibling.kind(),
                 "line_comment" | "block_comment" | "attribute_item"
-            ),
-            Language::TypeScript => matches!(sibling.kind(), "comment" | "decorator"),
-            Language::Python => false,
-        };
-        if !skip {
-            return Some(sibling);
-        }
-        current = sibling.next_named_sibling();
-    }
-    None
+            )
+        },
+        Language::TypeScript => |sibling| matches!(sibling.kind(), "comment" | "decorator"),
+        Language::Python => |_| false,
+    };
+    successors(node.next_named_sibling(), Node::next_named_sibling)
+        .find(|sibling| !skippable(*sibling))
 }
 
 /// The symbol-bearing declaration a documented sibling introduces, unwrapping
 /// declaration wrappers such as `export_statement` and `lexical_declaration`
 /// so a JSDoc above `export const f = …` anchors to `f`.
-fn symbol_target<'tree>(mut node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
+fn symbol_target<'tree>(node: Node<'tree>, language: Language) -> Option<Node<'tree>> {
+    let mut current = node;
     for _ in 0..8 {
-        if symbol_field(language, node.kind()).is_some() {
-            return Some(node);
+        if symbol_field(language, current.kind()).is_some() {
+            return Some(current);
         }
-        node = declaration_child(node, language)?;
+        current = declaration_child(current, language)?;
     }
     None
 }
@@ -106,8 +101,8 @@ fn declaration_child<'tree>(node: Node<'tree>, language: Language) -> Option<Nod
     if let Some(child) = node.child_by_field_name("declaration") {
         return Some(child);
     }
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
+    (0..node.named_child_count())
+        .filter_map(|index| node.named_child(index))
         .find(|child| symbol_field(language, child.kind()).is_some())
 }
 

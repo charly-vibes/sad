@@ -175,10 +175,36 @@ pub fn git(repo: &Path, args: &[&str]) {
     );
 }
 
-pub fn commit_file(repo: &Path, file: &str, subject: &str, trailer: Option<&str>) {
-    git(repo, &["add", "--", file]);
-    match trailer {
-        Some(trailer) => git(repo, &["commit", "--quiet", "-m", subject, "-m", trailer]),
-        None => git(repo, &["commit", "--quiet", "-m", subject]),
+/// One git commit a fixture needs: the file, the subject, and the optional
+/// attribution trailer the scope rules read.
+pub struct Commit<'a> {
+    pub file: &'a str,
+    pub subject: &'a str,
+    pub trailer: Option<&'a str>,
+}
+
+impl<'a> Commit<'a> {
+    pub fn new(file: &'a str, subject: &'a str) -> Self {
+        Self {
+            file,
+            subject,
+            trailer: None,
+        }
+    }
+
+    pub fn trailer(mut self, trailer: &'a str) -> Self {
+        self.trailer = Some(trailer);
+        self
+    }
+}
+
+pub fn commit_file(repo: &Path, commit: Commit<'_>) {
+    git(repo, &["add", "--", commit.file]);
+    match commit.trailer {
+        Some(trailer) => git(
+            repo,
+            &["commit", "--quiet", "-m", commit.subject, "-m", trailer],
+        ),
+        None => git(repo, &["commit", "--quiet", "-m", commit.subject]),
     }
 }

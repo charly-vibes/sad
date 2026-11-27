@@ -31,11 +31,25 @@ pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String
         .iter()
         .map(|rel_path| (rel_path.clone(), None))
         .collect();
-    if rel_paths.is_empty() {
+    let Some(stdout) = log_stdout(repo, rel_paths) else {
         return revisions;
-    }
+    };
     let indices = requested_indices(rel_paths);
-    let output = match git_command(repo)
+    assign_first_occurrences(&stdout, &indices, &mut revisions, rel_paths);
+    revisions
+}
+
+/// The successful stdout of one full-history `git log -z` pass, or `None`
+/// when there is nothing to resolve or git failed.
+///
+/// No requested paths means no history to resolve; a git failure or a
+/// non-zero exit degrades to `None`, which the caller renders as "no
+/// governing commit" for every path.
+fn log_stdout(repo: &Path, rel_paths: &[String]) -> Option<Vec<u8>> {
+    if rel_paths.is_empty() {
+        return None;
+    }
+    let output = git_command(repo)
         .args([
             "log",
             "--no-show-signature",
@@ -45,12 +59,8 @@ pub fn governing_revisions(repo: &Path, rel_paths: &[String]) -> BTreeMap<String
             "-z",
         ])
         .output()
-    {
-        Ok(output) if output.status.success() => output,
-        _ => return revisions,
-    };
-    assign_first_occurrences(&output.stdout, &indices, &mut revisions, rel_paths);
-    revisions
+        .ok()?;
+    output.status.success().then_some(output.stdout)
 }
 
 /// Requested paths as byte slices with their positions: history output is
@@ -63,28 +73,55 @@ fn requested_indices(rel_paths: &[String]) -> BTreeMap<&[u8], usize> {
         .collect()
 }
 
-/// Walk the `-z` stream newest-first and record each requested path's first
-/// mentioning commit. Later occurrences never overwrite earlier ones.
+/// Record each requested path's first mentioning commit: walk the `-z` stream
+/// newest-first, and later occurrences never overwrite earlier ones.
 fn assign_first_occurrences(
     stdout: &[u8],
     indices: &BTreeMap<&[u8], usize>,
     revisions: &mut BTreeMap<String, Option<String>>,
     rel_paths: &[String],
 ) {
-    let mut governing: Option<&str> = None;
-    for token in stdout.split(|byte| *byte == 0) {
-        if token.len() == 40 && token.iter().all(u8::is_ascii_hexdigit) {
-            governing = std::str::from_utf8(token).ok();
+    for (revision, token) in tokens_under_governing_commit(stdout) {
+        let path = record_path(token);
+        let Some(&index) = indices.get(path) else {
             continue;
-        }
-        let Some(revision) = governing else { continue };
-        let path = token.strip_prefix(b"\n").unwrap_or(token);
-        if let Some(&index) = indices.get(path)
-            && let Some(slot @ None) = revisions.get_mut(&rel_paths[index])
-        {
-            *slot = Some(revision.to_string());
-        }
+        };
+        let Some(slot @ None) = revisions.get_mut(&rel_paths[index]) else {
+            continue;
+        };
+        *slot = Some(revision.to_string());
     }
+}
+
+/// Each non-hash `-z` token paired with the newest commit hash seen before it.
+///
+/// A hash token opens a record and everything after it belongs to that commit
+/// until the next hash. A token that is itself exactly 40 hex digits is
+/// indistinguishable from a hash and is treated as one — the documented
+/// ambiguity that degrades such a path to "no governing commit".
+fn tokens_under_governing_commit(stdout: &[u8]) -> impl Iterator<Item = (&str, &[u8])> {
+    stdout
+        .split(|byte| *byte == 0)
+        .scan(None::<&str>, |governing, token| {
+            if is_hash(token) {
+                *governing = std::str::from_utf8(token).ok();
+                Some(None)
+            } else {
+                Some((*governing).map(|revision| (revision, token)))
+            }
+        })
+        .flatten()
+}
+
+/// Whether a `-z` token is a commit hash: exactly 40 ASCII hex digits.
+fn is_hash(token: &[u8]) -> bool {
+    token.len() == 40 && token.iter().all(u8::is_ascii_hexdigit)
+}
+
+/// A record's path token: the log format's newline before a file name is
+/// framing, not content.
+fn record_path(token: &[u8]) -> &[u8] {
+    token.strip_prefix(b"\n").unwrap_or(token)
 }
 
 /// A git command rooted at `repo` with inherited repository overrides removed

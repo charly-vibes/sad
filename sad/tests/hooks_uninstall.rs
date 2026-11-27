@@ -26,6 +26,11 @@ fn foreign_managed_config() -> &'static str {
     "pre-commit:\n  commands:\n# ddl:managed:start\n    ah-check:\n      run: ah check\n# ddl:managed:end\n    lint:\n      run: echo lint\npre-push:\n  commands:\n# ah:managed:start\n    spec-check:\n      run: ah check --mode gate\n# ah:managed:end\n    test:\n      run: echo test\n"
 }
 
+/// Uninstall must remove only the marker-owned blocks.
+///
+/// INVARIANT: the stub's own lines survive byte-for-byte; the `pre-push:`
+/// scaffold install added for the absent stage is not marker-owned, so
+/// uninstall leaves the emptied stage in place.
 #[test]
 fn uninstall_removes_the_block_from_both_stages() {
     let repo = Repo::init("unwire");
@@ -50,9 +55,6 @@ fn uninstall_removes_the_block_from_both_stages() {
         !content.contains("sad"),
         "no sad trace may remain; got:\n{content}"
     );
-    // The stub's own lines survive byte-for-byte. The `pre-push:` scaffold
-    // install added for the absent stage is not marker-owned, so uninstall
-    // leaves the emptied stage in place.
     assert_eq!(
         content,
         format!("{}pre-push:\n  commands:\n", lefthook_stub()),

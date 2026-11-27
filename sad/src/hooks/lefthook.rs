@@ -112,34 +112,34 @@ impl From<git_hooks::GitHooksError> for HooksError {
 pub fn install(start: &Path) -> Result<HooksInstall, HooksError> {
     let root = git_hooks::repo_root_from(start)?;
     let existing = config_text(&root);
-    let block = BlockDef::with_markers(MANAGED_NAME, MANAGED_START, MANAGED_END);
-    let mut install = HooksInstall {
-        pre_commit: StageOutcome::AlreadyWired,
-        pre_push: StageOutcome::AlreadyWired,
-    };
-    for stage in STAGES {
-        if existing
-            .as_deref()
-            .is_some_and(|text| stage_runs_gate(text, stage.key()))
-        {
-            set_outcome(&mut install, stage, StageOutcome::SkippedUserGate);
-            continue;
-        }
-        let outcome =
-            match git_hooks::lefthook::ensure_wired(&root, stage, &block, SAD_HOOK_COMMAND)? {
-                git_hooks::lefthook::WiredOutcome::Injected => StageOutcome::Injected,
-                git_hooks::lefthook::WiredOutcome::AlreadyWired => StageOutcome::AlreadyWired,
-            };
-        set_outcome(&mut install, stage, outcome);
-    }
-    Ok(install)
+    let pre_commit = stage_outcome(&root, existing.as_deref(), Stage::PreCommit)?;
+    let pre_push = stage_outcome(&root, existing.as_deref(), Stage::PrePush)?;
+    Ok(HooksInstall {
+        pre_commit,
+        pre_push,
+    })
 }
 
-fn set_outcome(install: &mut HooksInstall, stage: Stage, outcome: StageOutcome) {
-    match stage {
-        Stage::PreCommit => install.pre_commit = outcome,
-        Stage::PrePush => install.pre_push = outcome,
+/// The outcome one pinned stage became, wiring the gate into it when the
+/// existing config does not already run a user-authored gate.
+///
+/// Callers evaluate the stages in wiring order, so a stage that fails leaves
+/// the stages wired before it in place.
+fn stage_outcome(
+    root: &Path,
+    existing: Option<&str>,
+    stage: Stage,
+) -> Result<StageOutcome, HooksError> {
+    if existing.is_some_and(|text| stage_runs_gate(text, stage.key())) {
+        return Ok(StageOutcome::SkippedUserGate);
     }
+    let block = BlockDef::with_markers(MANAGED_NAME, MANAGED_START, MANAGED_END);
+    Ok(
+        match git_hooks::lefthook::ensure_wired(root, stage, &block, SAD_HOOK_COMMAND)? {
+            git_hooks::lefthook::WiredOutcome::Injected => StageOutcome::Injected,
+            git_hooks::lefthook::WiredOutcome::AlreadyWired => StageOutcome::AlreadyWired,
+        },
+    )
 }
 
 /// Remove every sad-owned managed block from the repository containing
@@ -158,21 +158,13 @@ pub fn uninstall(start: &Path) -> Result<HooksUninstall, HooksError> {
             root.display()
         ),
     })?;
-    let text = std::fs::read_to_string(&path).map_err(|error| HooksError::Io {
-        path: path.clone(),
-        message: format!("cannot read lefthook config: {error}"),
-    })?;
+    let text = read_config(&path)?;
     let stripped = strip_sad_blocks(&text)?;
     ensure_blocks_are_pinned(&text)?;
-    let mut uninstall = HooksUninstall {
-        pre_commit: UninstallOutcome::NotWired,
-        pre_push: UninstallOutcome::NotWired,
+    let uninstall = HooksUninstall {
+        pre_commit: uninstall_outcome(&text, Stage::PreCommit),
+        pre_push: uninstall_outcome(&text, Stage::PrePush),
     };
-    for stage in STAGES {
-        if stage_has_block(&text, stage.key()) {
-            set_uninstall_outcome(&mut uninstall, stage, UninstallOutcome::Removed);
-        }
-    }
     if stripped != text {
         std::fs::write(&path, &stripped).map_err(|error| HooksError::Io {
             path: path.clone(),
@@ -182,10 +174,21 @@ pub fn uninstall(start: &Path) -> Result<HooksUninstall, HooksError> {
     Ok(uninstall)
 }
 
-fn set_uninstall_outcome(uninstall: &mut HooksUninstall, stage: Stage, outcome: UninstallOutcome) {
-    match stage {
-        Stage::PreCommit => uninstall.pre_commit = outcome,
-        Stage::PrePush => uninstall.pre_push = outcome,
+/// The lefthook config text at `path`, refusing an unreadable file.
+fn read_config(path: &Path) -> Result<String, HooksError> {
+    std::fs::read_to_string(path).map_err(|error| HooksError::Io {
+        path: path.to_path_buf(),
+        message: format!("cannot read lefthook config: {error}"),
+    })
+}
+
+/// What one pinned stage became: the stage unwired when it carries the
+/// sad managed block, otherwise never wired.
+fn uninstall_outcome(text: &str, stage: Stage) -> UninstallOutcome {
+    if stage_has_block(text, stage.key()) {
+        UninstallOutcome::Removed
+    } else {
+        UninstallOutcome::NotWired
     }
 }
 
@@ -247,9 +250,11 @@ fn ensure_blocks_are_pinned(text: &str) -> Result<(), HooksError> {
 }
 
 /// Whether the stage's section carries the sad managed block, matched as
-/// an exact trimmed line — the same predicate the strip and the guard
-/// use, so detection and removal can never disagree. A missing stage
-/// yields `false`, because there is nothing to unwire.
+/// an exact trimmed line.
+///
+/// That is the same predicate the strip and the guard use, so detection and
+/// removal can never disagree. A missing stage yields `false`, because
+/// there is nothing to unwire.
 fn stage_has_block(content: &str, stage_key: &str) -> bool {
     stage_section(content, stage_key)
         .is_some_and(|section| section.lines().any(|line| line.trim_end() == MANAGED_START))
@@ -304,9 +309,11 @@ fn stage_runs_gate(content: &str, stage_key: &str) -> bool {
 }
 
 /// The stage's section including its `key:` line: from the key to the
-/// next column-0 key line. Column-0 comments are not keys (mirrors
-/// genesis's `is_column_zero_key`), so injected markers stay inside the
-/// section; a missing stage yields `None`.
+/// next column-0 key line.
+///
+/// Column-0 comments are not keys (mirrors genesis's
+/// `is_column_zero_key`), so injected markers stay inside the section; a
+/// missing stage yields `None`.
 fn stage_section<'a>(content: &'a str, stage_key: &str) -> Option<&'a str> {
     let start = if content.starts_with(stage_key) {
         0
@@ -327,9 +334,10 @@ fn stage_section<'a>(content: &'a str, stage_key: &str) -> Option<&'a str> {
 }
 
 /// True for a column-0 YAML key: first char is not whitespace or `#`, and
-/// the line is not an HTML-comment marker. Mirrors genesis's
-/// `is_column_zero_key` so the guard reads sections exactly as
-/// `ensure_wired` anchors them.
+/// the line is not an HTML-comment marker.
+///
+/// Mirrors genesis's `is_column_zero_key` so the guard reads sections
+/// exactly as `ensure_wired` anchors them.
 fn is_column_zero_key(line: &str) -> bool {
     matches!(
         line.chars().next(),

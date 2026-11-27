@@ -25,17 +25,18 @@ use crate::exemptions;
 use crate::model::{AnalyzedFile, AttributionClass, Finding, Severity, SuppressionEntry};
 
 /// The shared spec-traced error envelope: an error result carrying the
-/// named failure code, message, optional spec anchor, owning module, and
-/// non-empty remediation (Invariant 3.2.5), serialized as a genesis error
-/// envelope.
+/// named failure code, message, owning module, and non-empty remediation
+/// (Invariant 3.2.5), serialized as a genesis error envelope.
+///
+/// The optional spec anchor stays unset: no failure sad raises is anchored
+/// to a spec section today.
 pub(crate) fn spec_error_envelope(
     code: &str,
     message: &str,
-    spec: Option<&str>,
     module: &str,
     remediation: Vec<RemediationEntry>,
 ) -> serde_json::Value {
-    let error = ErrorResult::new(code, message, None, spec, Some(module), vec![], remediation)
+    let error = ErrorResult::new(code, message, None, None, Some(module), vec![], remediation)
         .expect("remediation is non-empty by construction (Invariant 3.2.5)");
     serde_json::to_value(Envelope::error(env!("CARGO_PKG_VERSION"), error, vec![]))
         .expect("envelope serialization cannot fail")
@@ -141,6 +142,22 @@ impl CheckStats {
     ) -> Self {
         let summary = exemptions::summary(analyzed);
         Self {
+            files_analyzed: analyzed.len() - summary.files_exempt,
+            files_exempt: summary.files_exempt,
+            exempt_nodes: summary.nodes_exempt,
+            suppression_debt: debt.len(),
+            findings: findings.len(),
+            findings_blocking: 0,
+            findings_suppressed: 0,
+            ..Self::file_and_comment_counts(files, analyzed)
+        }
+    }
+
+    /// The discovery tallies carried in from [`FileCounts`] plus the
+    /// per-class comment counts, zeroing the channels [`CheckStats::of`]
+    /// fills in itself.
+    fn file_and_comment_counts(files: FileCounts, analyzed: &[AnalyzedFile]) -> Self {
+        Self {
             files_discovered: files.discovered,
             files_excluded: files.excluded,
             files_selected: files.selected,
@@ -149,19 +166,13 @@ impl CheckStats {
             files_without_commit: files.without_commit,
             files_unattributed: files.unattributed,
             files_unsupported: files.unsupported,
-            files_analyzed: analyzed.len() - summary.files_exempt,
-            files_exempt: summary.files_exempt,
-            exempt_nodes: summary.nodes_exempt,
             comments_header: count_class(analyzed, AttributionClass::Header),
             comments_doc: count_class(analyzed, AttributionClass::Doc),
             comments_marker: count_class(analyzed, AttributionClass::Marker),
             comments_rationale: count_class(analyzed, AttributionClass::Rationale),
             comments_suppression: count_class(analyzed, AttributionClass::Suppression),
             comments_prose: count_class(analyzed, AttributionClass::Prose),
-            suppression_debt: debt.len(),
-            findings: findings.len(),
-            findings_blocking: 0,
-            findings_suppressed: 0,
+            ..Default::default()
         }
     }
 }

@@ -1,7 +1,20 @@
 [pretender]
 mode = "gate"
 languages = ["auto"]
-exclude = ["vendor/**", "node_modules/**", "**/*_generated.*"]
+exclude = [
+  "vendor/**",
+  "node_modules/**",
+  "**/*_generated.*",
+  # Fixture trees are deliberately bad-prose input data for the contract
+  # binaries, not code the gate reviews; scoring them only produces noise.
+  "sad/tests/fixtures/**",
+]
+
+# Test role: repo-driving fixture helpers (TempRepo::write et al.) are
+# conventionally `(&self, rel, contents)`; Clean Code's few-arguments rule is
+# still satisfied at 3, and forcing 1-parameter helpers would obscure intent.
+[thresholds.test]
+params_max = 3
 
 [roles.test]
 paths = ["sad/tests/**", "**/*_test.*"]

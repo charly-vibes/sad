@@ -82,11 +82,20 @@ impl Baseline {
                 });
             }
         };
-        let mut baseline: Self =
-            serde_json::from_slice(&bytes).map_err(|err| BaselineError::Parse {
-                path: path.to_path_buf(),
-                message: err.to_string(),
-            })?;
+        let mut baseline = Self::parse_checked(path, &bytes)?;
+        // Tolerate hand-edited ordering/duplication without letting it change
+        // gate semantics or the next persisted document.
+        baseline.finding_ids = normalize(baseline.finding_ids);
+        Ok(Some(baseline))
+    }
+
+    /// Parse the baseline document and refuse unsupported schema versions,
+    /// naming `path` in every failure.
+    fn parse_checked(path: &Path, bytes: &[u8]) -> Result<Self, BaselineError> {
+        let baseline: Self = serde_json::from_slice(bytes).map_err(|err| BaselineError::Parse {
+            path: path.to_path_buf(),
+            message: err.to_string(),
+        })?;
         if baseline.schema_version != SCHEMA_VERSION
             && !LEGACY_SCHEMA_VERSIONS.contains(&baseline.schema_version)
         {
@@ -98,10 +107,7 @@ impl Baseline {
                 ),
             });
         }
-        // Tolerate hand-edited ordering/duplication without letting it change
-        // gate semantics or the next persisted document.
-        baseline.finding_ids = normalize(baseline.finding_ids);
-        Ok(Some(baseline))
+        Ok(baseline)
     }
 
     pub fn needs_migration(&self) -> bool {

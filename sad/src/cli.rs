@@ -142,7 +142,6 @@ fn config_error_envelope(path: &Path, err: &ConfigError) -> serde_json::Value {
     spec_error_envelope(
         "config_error",
         &message,
-        None,
         "config",
         vec![RemediationEntry {
             command: "sad --help".into(),
@@ -167,13 +166,7 @@ fn gate_failure_envelope(
         envelope::GateFailure::Growth { .. } => ("baseline", growth_remediation(config)),
         envelope::GateFailure::Ledger { .. } => ("resolvers", ledger_remediation()),
     };
-    spec_error_envelope(
-        failure.code(),
-        &failure.to_string(),
-        None,
-        module,
-        remediation,
-    )
+    spec_error_envelope(failure.code(), &failure.to_string(), module, remediation)
 }
 
 /// The effective re-adoption invocation, including `--config` when supplied.
@@ -316,7 +309,6 @@ pub fn argument_error_envelope(err: &clap::Error) -> String {
     serde_json::to_string(&spec_error_envelope(
         "argument_error",
         &message,
-        None,
         "cli",
         vec![RemediationEntry {
             command: "sad --help".into(),

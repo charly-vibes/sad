@@ -114,25 +114,32 @@ pub struct AnalyzedFile {
     pub header: bool,
 }
 
+/// FNV-1a offset basis and prime (64-bit).
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+fn mix(hash: u64, byte: u8) -> u64 {
+    (hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME)
+}
+
 /// FNV-1a 64-bit content hash, rendered as 16 lowercase hex characters.
 ///
 /// Bodies are normalised while hashing: line endings collapse to `\n` and
 /// trailing whitespace is stripped per line, so identity survives editor
-/// churn without allocating a second copy of the body.
+/// churn without allocating a second copy of the body. A `\n` separator
+/// precedes every line after the first, so identical content hashes
+/// identically across line-ending churn.
 pub fn content_hash(body: &str) -> String {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut first_line = true;
-    for line in body.split('\n') {
-        if !first_line {
-            hash ^= u64::from(b'\n');
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-        first_line = false;
-        for byte in line.trim_end().as_bytes() {
-            hash ^= u64::from(*byte);
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
+    let hash = body
+        .split('\n')
+        .enumerate()
+        .fold(FNV_OFFSET, |hash, (index, line)| {
+            let hash = if index == 0 { hash } else { mix(hash, b'\n') };
+            line.trim_end()
+                .as_bytes()
+                .iter()
+                .fold(hash, |hash, byte| mix(hash, *byte))
+        });
     format!("{hash:016x}")
 }
 
@@ -198,7 +205,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn finding_kind_serialises_as_its_check_id() {
+    fn finding_kind_ids_roundtrip() {
         for kind in [
             FindingKind::CommentOutsideChannel,
             FindingKind::CommentedOutCode,
@@ -210,7 +217,10 @@ mod tests {
             let serialised = serde_json::to_string(&kind).expect("FindingKind must serialise");
             assert_eq!(serialised, format!("\"{}\"", kind.id()));
         }
+    }
 
+    #[test]
+    fn finding_serialises_check_and_remediation() {
         let finding = Finding {
             check: FindingKind::MissingHeader,
             id: "src/lib.rs::-::0123456789abcdef".to_string(),

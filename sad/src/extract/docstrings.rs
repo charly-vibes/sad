@@ -9,8 +9,8 @@ use tree_sitter::Node;
 /// First non-comment named child, so a leading Python comment cannot hide a
 /// module docstring.
 fn python_first_statement<'tree>(node: Node<'tree>) -> Option<Node<'tree>> {
-    let mut cursor = node.walk();
-    node.named_children(&mut cursor)
+    (0..node.named_child_count())
+        .filter_map(|index| node.named_child(index))
         .find(|child| child.kind() != "comment")
 }
 
@@ -30,25 +30,26 @@ pub(crate) fn python_docstring<'tree>(node: Node<'tree>) -> Option<Node<'tree>> 
     if first.kind() != "expression_statement" {
         return None;
     }
-    let mut cursor = first.walk();
-    let value = first.named_children(&mut cursor).next()?;
+    let value = first.named_child(0)?;
     string_literal(value)
 }
 
 /// Unwrap `parenthesized_expression`/`concatenated_string` wrappers down to
 /// the first string literal, whose `string_content` carries the body.
-fn string_literal<'tree>(mut node: Node<'tree>) -> Option<Node<'tree>> {
+fn string_literal<'tree>(node: Node<'tree>) -> Option<Node<'tree>> {
+    let mut current = node;
     loop {
-        match node.kind() {
-            "string" => return Some(node),
+        match current.kind() {
+            "string" => return Some(current),
             "parenthesized_expression" | "concatenated_string" => {
-                let mut cursor = node.walk();
-                node = node.named_children(&mut cursor).find(|child| {
-                    matches!(
-                        child.kind(),
-                        "string" | "parenthesized_expression" | "concatenated_string"
-                    )
-                })?;
+                current = (0..current.named_child_count())
+                    .filter_map(|index| current.named_child(index))
+                    .find(|child| {
+                        matches!(
+                            child.kind(),
+                            "string" | "parenthesized_expression" | "concatenated_string"
+                        )
+                    })?;
             }
             _ => return None,
         }

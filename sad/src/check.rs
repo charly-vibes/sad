@@ -167,7 +167,7 @@ fn analyze_files(
                 continue;
             }
         };
-        analyzed.push(analyzer.analyze(Path::new(rel_path), rel_path, &source, cfg));
+        analyzed.push(analyzer.analyze(rel_path, &source));
     }
     (analyzed, skipped)
 }

@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use tree_sitter::{Node, Parser, Tree};
+use tree_sitter::{Parser, Tree};
 
 use crate::attribution::MarkerMatcher;
 use crate::config::Config;
@@ -41,17 +41,14 @@ pub fn analyze_file(path: &Path, rel_path: &str, source: &str, cfg: &Config) -> 
     let normalised = normalise_source(source);
     let source = normalised.as_ref();
     let markers = MarkerMatcher::new(&cfg.marker_pattern);
-    let Some(tree) = parse_source(language, source) else {
+    let kit = MarkerKit {
+        prefix: &cfg.marker_prefix,
+        matcher: &markers,
+    };
+    let Some(parsed) = parse_source(language, source) else {
         return empty_file(rel_path, language);
     };
-    assemble(
-        rel_path,
-        language,
-        source,
-        tree.root_node(),
-        &cfg.marker_prefix,
-        &markers,
-    )
+    assemble(rel_path, &parsed, kit)
 }
 
 /// Reusable extraction state for one gate run: the compiled marker matcher and
@@ -62,14 +59,17 @@ pub fn analyze_file(path: &Path, rel_path: &str, source: &str, cfg: &Config) -> 
 /// through it.
 pub struct Analyzer {
     markers: MarkerMatcher,
+    /// Generated-code marker prefix from the run's config.
+    marker_prefix: String,
     parsers: [Option<Parser>; 3],
 }
 
 impl Analyzer {
-    /// Build the run's matcher and parsers from `cfg`.
+    /// Build the run's matcher, prefix, and parsers from `cfg`.
     pub fn new(cfg: &Config) -> Self {
         Self {
             markers: MarkerMatcher::new(&cfg.marker_pattern),
+            marker_prefix: cfg.marker_prefix.clone(),
             parsers: [
                 parser_for(Language::Rust),
                 parser_for(Language::Python),
@@ -81,17 +81,12 @@ impl Analyzer {
     /// Analyse `source` with the run's matcher and the language's parser.
     ///
     /// The contract matches [`analyze_file`], including the unsupported
-    /// extension placeholder. `Parser::parse` resets incremental state, so
-    /// reuse cannot leak one file's tree into the next.
-    pub fn analyze(
-        &mut self,
-        path: &Path,
-        rel_path: &str,
-        source: &str,
-        cfg: &Config,
-    ) -> AnalyzedFile {
-        let rel = Path::new(rel_path);
-        let Some(language) = language_for_path(path).or_else(|| language_for_path(rel)) else {
+    /// extension placeholder: the language is resolved from `rel_path`, which
+    /// is both the reported path and the path the grammar is picked from.
+    /// `Parser::parse` resets incremental state, so reuse cannot leak one
+    /// file's tree into the next.
+    pub fn analyze(&mut self, rel_path: &str, source: &str) -> AnalyzedFile {
+        let Some(language) = language_for_path(Path::new(rel_path)) else {
             return empty_file(rel_path, Language::Rust);
         };
         let normalised = normalise_source(source);
@@ -102,21 +97,47 @@ impl Analyzer {
         let Some(tree) = tree else {
             return empty_file(rel_path, language);
         };
-        assemble(
-            rel_path,
+        let parsed = Parsed {
             language,
             source,
-            tree.root_node(),
-            &cfg.marker_prefix,
-            &self.markers,
-        )
+            tree,
+        };
+        assemble(rel_path, &parsed, self.marker_kit())
+    }
+
+    /// The run's marker kit: prefix and matcher, both configured at [`new`].
+    fn marker_kit(&self) -> MarkerKit<'_> {
+        MarkerKit {
+            prefix: &self.marker_prefix,
+            matcher: &self.markers,
+        }
     }
 }
 
+/// One parsed file: its language, normalised source, and parse tree.
+///
+/// The tree owns the node storage that walking `root` reads.
+struct Parsed<'t> {
+    language: Language,
+    source: &'t str,
+    tree: Tree,
+}
+
+/// The per-run marker kit: the generated-code marker prefix and its matcher.
+struct MarkerKit<'a> {
+    prefix: &'a str,
+    matcher: &'a MarkerMatcher,
+}
+
 /// Parse `source` with a freshly configured parser for `language`.
-fn parse_source(language: Language, source: &str) -> Option<Tree> {
+fn parse_source(language: Language, source: &str) -> Option<Parsed<'_>> {
     let mut parser = parser_for(language)?;
-    parser.parse(source, None)
+    let tree = parser.parse(source, None)?;
+    Some(Parsed {
+        language,
+        source,
+        tree,
+    })
 }
 
 /// A parser configured with the pinned grammar for `language`.
@@ -140,22 +161,17 @@ fn parser_slot(language: Language) -> usize {
     }
 }
 
-/// Build the [`AnalyzedFile`] from a parse tree: header detection, the node
+/// Build the [`AnalyzedFile`] from a parsed file: header detection, the node
 /// walk, and the whole-file exemption decision.
-fn assemble(
-    rel_path: &str,
-    language: Language,
-    source: &str,
-    root: Node<'_>,
-    marker_prefix: &str,
-    markers: &MarkerMatcher,
-) -> AnalyzedFile {
-    let (header, header_span, module_doc_start) = detect_header(language, root, source);
+fn assemble(rel_path: &str, parsed: &Parsed<'_>, kit: MarkerKit<'_>) -> AnalyzedFile {
+    let root = parsed.tree.root_node();
+    let (header, header_span, module_doc_start) =
+        detect_header(parsed.language, root, parsed.source);
     let context = WalkContext {
-        language,
-        source,
-        marker_prefix,
-        markers,
+        language: parsed.language,
+        source: parsed.source,
+        marker_prefix: kit.prefix,
+        markers: kit.matcher,
         header_span,
         module_doc_start,
     };
@@ -163,7 +179,7 @@ fn assemble(
     let exempt = compute_exempt(&nodes);
     AnalyzedFile {
         path: rel_path.to_string(),
-        language,
+        language: parsed.language,
         nodes,
         exempt,
         header,

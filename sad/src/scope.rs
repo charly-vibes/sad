@@ -205,10 +205,39 @@ pub fn select_in_scope(repo: &Path, files: &[String], cfg: &Config, all: bool) -
             ..ScopeSelection::default()
         };
     }
-
-    let trailer = cfg.attribution.trailer.as_str();
-    let shallow = is_shallow_repository(repo);
+    let facts = AttributionFacts {
+        repo,
+        trailer: cfg.attribution.trailer.as_str(),
+        shallow: is_shallow_repository(repo),
+    };
     let revisions = governing_revisions(repo, files);
+    record_selection(files, &revisions, &facts)
+}
+
+/// Repository-level attribution facts, resolved once per selection.
+struct AttributionFacts<'a> {
+    repo: &'a Path,
+    trailer: &'a str,
+    shallow: bool,
+}
+
+impl AttributionFacts<'_> {
+    /// Whether the full message of `revision` carries the configured trailer.
+    fn attributed(&self, revision: &str) -> bool {
+        governing_commit_has_trailer(self.repo, revision, self.trailer, self.shallow)
+    }
+}
+
+/// Sort `files` into the selection using their governing revisions.
+///
+/// Each revision's trailer verdict is memoised, because many files commonly
+/// share one governing commit; a file with no governing commit is new or
+/// untracked work and stays selected.
+fn record_selection(
+    files: &[String],
+    revisions: &BTreeMap<String, Option<String>>,
+    facts: &AttributionFacts<'_>,
+) -> ScopeSelection {
     let mut verdicts: BTreeMap<String, bool> = BTreeMap::new();
     let mut selection = ScopeSelection::default();
     for file in files {
@@ -218,9 +247,9 @@ pub fn select_in_scope(repo: &Path, files: &[String], cfg: &Config, all: bool) -
                 selection.without_commit += 1;
             }
             Some(revision) => {
-                let attributed = *verdicts.entry(revision.clone()).or_insert_with(|| {
-                    governing_commit_has_trailer(repo, revision, trailer, shallow)
-                });
+                let attributed = *verdicts
+                    .entry(revision.clone())
+                    .or_insert_with(|| facts.attributed(revision));
                 if attributed {
                     selection.files.push(file.clone());
                     selection.attributed += 1;

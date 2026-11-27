@@ -10,8 +10,20 @@ use tree_sitter::Node;
 
 use crate::model::{CommentKind, Language};
 
-pub(crate) fn comment_kind(language: Language, node: Node<'_>, raw: &str) -> CommentKind {
-    match language {
+/// Which syntax a node is read with and which channel it occupies: the
+/// language's grammar plus the comment kind attributed to it.
+pub(crate) struct CommentChannel {
+    pub(crate) language: Language,
+    pub(crate) kind: CommentKind,
+}
+
+/// Attribute a comment node to its channel.
+///
+/// The raw source text is derived from `node` and `source` here so callers
+/// never pass both the node and its slice separately.
+pub(crate) fn comment_channel(language: Language, node: Node<'_>, source: &str) -> CommentChannel {
+    let raw = source.get(node.byte_range()).unwrap_or("");
+    let kind = match language {
         Language::Rust => {
             if node.child_by_field_name("doc").is_some() {
                 CommentKind::Doc
@@ -31,19 +43,16 @@ pub(crate) fn comment_kind(language: Language, node: Node<'_>, raw: &str) -> Com
                 CommentKind::Block
             }
         }
-    }
+    };
+    CommentChannel { language, kind }
 }
 
-pub(crate) fn comment_body(
-    language: Language,
-    kind: CommentKind,
-    node: Node<'_>,
-    raw: &str,
-    source: &str,
-) -> String {
-    match language {
+/// Normalise the body of a comment node on its channel.
+pub(crate) fn comment_body(channel: &CommentChannel, node: Node<'_>, source: &str) -> String {
+    let raw = source.get(node.byte_range()).unwrap_or("");
+    match channel.language {
         Language::Rust => strip_rust_marker(raw),
-        Language::Python => match kind {
+        Language::Python => match channel.kind {
             CommentKind::Doc => python_docstring_body(node, raw, source),
             _ => strip_hash_marker(raw),
         },

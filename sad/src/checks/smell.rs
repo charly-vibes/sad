@@ -33,6 +33,26 @@ const STOPWORDS: &[&str] = &[
     "could",
 ];
 
+/// Config, compiled marker pattern, and ledger context for one classify run.
+///
+/// Grouped so the todo/apology predicates take one argument instead of three
+/// parallel ones, and the marker pattern is compiled exactly once per run.
+struct MarkerContext<'a> {
+    cfg: &'a Config,
+    marker_pattern: Option<Regex>,
+    context: &'a RepoContext,
+}
+
+impl<'a> MarkerContext<'a> {
+    fn new(cfg: &'a Config, context: &'a RepoContext) -> Self {
+        Self {
+            cfg,
+            marker_pattern: Regex::new(&cfg.marker_pattern).ok(),
+            context,
+        }
+    }
+}
+
 /// Classify every prose run and block finding once, in place.
 ///
 /// Exempt files are skipped, the configured marker pattern is compiled once
@@ -45,11 +65,12 @@ pub fn classify(
     cfg: &Config,
     context: &RepoContext,
 ) {
-    let marker_pattern = Regex::new(&cfg.marker_pattern).ok();
+    let marker = MarkerContext::new(cfg, context);
     for file in analyzed.iter().filter(|file| !file.exempt) {
         for run in prose_runs(&file.nodes) {
-            let smell = smell_of(&file.nodes, &run, cfg, marker_pattern.as_ref(), context);
-            apply_smell_to_run(findings, file, &run, smell);
+            let smell = smell_of(&file.nodes, &run, &marker);
+            let ids = run_finding_ids(file, &run);
+            apply_smell_to_run(findings, &ids, smell);
         }
     }
     classify_block_findings(findings);
@@ -60,18 +81,8 @@ pub fn classify(
 /// Membership is keyed on stable finding ids, not path+line: two single-node
 /// runs can share a row, and a line-keyed stamp would let the last run's
 /// verdict overwrite its neighbour's.
-fn apply_smell_to_run(findings: &mut [Finding], file: &AnalyzedFile, run: &[usize], smell: Smell) {
+fn apply_smell_to_run(findings: &mut [Finding], ids: &BTreeSet<String>, smell: Smell) {
     let severity = severity_of(smell);
-    let ids: BTreeSet<String> = run
-        .iter()
-        .map(|&index| {
-            finding_id(
-                &file.path,
-                &file.nodes[index].symbol_path,
-                &file.nodes[index].body,
-            )
-        })
-        .collect();
     for finding in findings.iter_mut().filter(|finding| {
         finding.check == FindingKind::CommentOutsideChannel && ids.contains(&finding.id)
     }) {
@@ -79,6 +90,19 @@ fn apply_smell_to_run(findings: &mut [Finding], file: &AnalyzedFile, run: &[usiz
         finding.severity = severity;
         finding.remediation = remediation::for_smell(smell, &finding.path);
     }
+}
+
+/// Stable finding ids of one run's member nodes, for the stamp lookup.
+fn run_finding_ids(file: &AnalyzedFile, run: &[usize]) -> BTreeSet<String> {
+    run.iter()
+        .map(|&index| {
+            finding_id(
+                &file.path,
+                &file.nodes[index].symbol_path,
+                &file.nodes[index].body,
+            )
+        })
+        .collect()
 }
 
 /// Separator-bodied block findings become banners; every other block is kept.
@@ -131,13 +155,7 @@ fn flush(runs: &mut Vec<Vec<usize>>, current: &mut Vec<usize>) {
     }
 }
 
-fn smell_of(
-    nodes: &[CommentNode],
-    run: &[usize],
-    cfg: &Config,
-    marker_pattern: Option<&Regex>,
-    context: &RepoContext,
-) -> Smell {
+fn smell_of(nodes: &[CommentNode], run: &[usize], marker: &MarkerContext<'_>) -> Smell {
     let body = run
         .iter()
         .map(|index| nodes[*index].body.as_str())
@@ -146,10 +164,10 @@ fn smell_of(
     if banner(&body) {
         return Smell::Banner;
     }
-    if todo(&body, cfg, marker_pattern, context) {
+    if todo(&body, marker) {
         return Smell::Todo;
     }
-    if apology(&body, cfg, marker_pattern, context) {
+    if apology(&body, marker) {
         return Smell::Apology;
     }
     let next = run
@@ -176,20 +194,15 @@ fn banner(body: &str) -> bool {
     !trimmed.is_empty() && !trimmed.chars().any(char::is_alphanumeric)
 }
 
-fn todo(body: &str, cfg: &Config, marker_pattern: Option<&Regex>, context: &RepoContext) -> bool {
+fn todo(body: &str, marker: &MarkerContext<'_>) -> bool {
     let tagged = body
         .split(|next: char| !next.is_alphanumeric())
         .any(|word| matches!(word, "TODO" | "FIXME" | "XXX"));
-    tagged && !has_resolving_marker(body, cfg, marker_pattern, context)
+    tagged && !has_resolving_marker(body, marker)
 }
 
-fn apology(
-    body: &str,
-    cfg: &Config,
-    marker_pattern: Option<&Regex>,
-    context: &RepoContext,
-) -> bool {
-    if has_resolving_marker(body, cfg, marker_pattern, context) {
+fn apology(body: &str, marker: &MarkerContext<'_>) -> bool {
+    if has_resolving_marker(body, marker) {
         return false;
     }
     let lower = body.to_lowercase();
@@ -209,17 +222,12 @@ fn apology(
 }
 
 /// Whether any marker-shaped `prefix` + id in `body` resolves against a ledger.
-fn has_resolving_marker(
-    body: &str,
-    cfg: &Config,
-    marker_pattern: Option<&Regex>,
-    context: &RepoContext,
-) -> bool {
-    let Some(regex) = marker_pattern else {
+fn has_resolving_marker(body: &str, marker: &MarkerContext<'_>) -> bool {
+    let Some(regex) = marker.marker_pattern.as_ref() else {
         return false;
     };
-    let prefix = cfg.marker_prefix.as_str();
-    if prefix.is_empty() || !context.any_resolver_available() {
+    let prefix = marker.cfg.marker_prefix.as_str();
+    if prefix.is_empty() || !marker.context.any_resolver_available() {
         return false;
     }
     body.match_indices(prefix).any(|(start, _)| {
@@ -229,7 +237,7 @@ fn has_resolving_marker(
             .is_none_or(|previous| !previous.is_alphanumeric());
         boundary
             && leading_marker_id(&body[start..], prefix, regex)
-                .is_some_and(|id| context.resolves(id))
+                .is_some_and(|id| marker.context.resolves(id))
     })
 }
 

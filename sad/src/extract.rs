@@ -21,12 +21,14 @@ use tree_sitter::Node;
 use crate::attribution::{
     MarkerMatcher, classify, has_generated_marker, is_coding_cookie, is_exemption, is_shebang,
 };
-use crate::model::{AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language};
+use crate::model::{
+    AnalyzedFile, AttributionClass, CommentKind, CommentNode, Language, SuppressionDirective,
+};
 
 pub(crate) use self::analyzer::parser_for;
 pub use self::analyzer::{Analyzer, analyze_file};
 
-use self::bodies::{comment_body, comment_kind, python_docstring_body};
+use self::bodies::{comment_body, comment_channel, python_docstring_body};
 use self::docstrings::python_docstring;
 use self::symbols::symbol_path;
 
@@ -64,15 +66,20 @@ struct WalkContext<'a> {
     module_doc_start: Option<usize>,
 }
 
+/// One node's extraction: the node to record (the comment itself, or the
+/// docstring's string literal), its normalised body, and the verdict.
+struct Extracted<'tree> {
+    node: Node<'tree>,
+    kind: CommentKind,
+    body: String,
+    class: AttributionClass,
+    directive: Option<SuppressionDirective>,
+}
+
 /// Walk the parse tree and return the extracted nodes in source order.
 fn collect_nodes(root: Node<'_>, context: WalkContext<'_>) -> Vec<CommentNode> {
     let mut extractor = Extractor {
-        language: context.language,
-        source: context.source,
-        marker_prefix: context.marker_prefix,
-        markers: context.markers,
-        header_span: context.header_span,
-        module_doc_start: context.module_doc_start,
+        context,
         nodes: Vec::new(),
     };
     extractor.walk(root);
@@ -108,14 +115,8 @@ fn next_code_line(node: Node<'_>, source: &str) -> Option<String> {
 }
 
 struct Extractor<'a> {
-    language: Language,
-    source: &'a str,
-    marker_prefix: &'a str,
-    markers: &'a MarkerMatcher,
-    /// Byte span of the file's leading header-channel run, when present.
-    header_span: Option<(usize, usize)>,
-    /// Start byte of the Python module docstring, when present.
-    module_doc_start: Option<usize>,
+    /// Everything the walk reads per node.
+    context: WalkContext<'a>,
     /// `(start byte, node)` pairs sorted into source order at the end.
     nodes: Vec<(usize, CommentNode)>,
 }
@@ -132,49 +133,61 @@ impl<'a> Extractor<'a> {
     fn walk(&mut self, root: Node<'_>) {
         let mut pending = vec![root];
         while let Some(node) = pending.pop() {
-            match self.language {
-                Language::Rust => {
-                    if matches!(node.kind(), "line_comment" | "block_comment") {
-                        self.push_comment(node);
-                    }
-                }
-                Language::Python => {
-                    if node.kind() == "comment" {
-                        self.push_comment(node);
-                    }
-                    if matches!(
-                        node.kind(),
-                        "module" | "class_definition" | "function_definition"
-                    ) && let Some(docstring) = python_docstring(node)
-                    {
-                        self.push_docstring(docstring, node.kind() == "module");
-                    }
-                }
-                Language::TypeScript => {
-                    if node.kind() == "comment" {
-                        self.push_comment(node);
-                    }
-                }
+            if let Some(extracted) = self.extract_node(node) {
+                self.nodes.push(self.finish(extracted));
             }
-
             let mut cursor = node.walk();
             let children: Vec<_> = node.children(&mut cursor).collect();
             pending.extend(children.into_iter().rev());
         }
     }
 
-    fn push_comment(&mut self, node: Node<'_>) {
-        let source = self.source;
-        let raw = source.get(node.byte_range()).unwrap_or("");
-        let kind = comment_kind(self.language, node, raw);
-        let body = comment_body(self.language, kind, node, raw, source);
-        if let Some(class) = self.file_metadata_class(node, &body) {
-            self.push(node, kind, class, body, raw, None);
-            return;
+    /// Which node kinds each language extracts, matched as a pure classifier:
+    /// comments in every language, plus the Python docstring of a module,
+    /// class, or function.
+    fn extract_node<'tree>(&self, node: Node<'tree>) -> Option<Extracted<'tree>> {
+        match self.context.language {
+            Language::Rust if matches!(node.kind(), "line_comment" | "block_comment") => {
+                self.extract_comment(node)
+            }
+            Language::Python if node.kind() == "comment" => self.extract_comment(node),
+            Language::Python
+                if matches!(
+                    node.kind(),
+                    "module" | "class_definition" | "function_definition"
+                ) =>
+            {
+                python_docstring(node)
+                    .map(|docstring| self.extract_docstring(docstring, node.kind() == "module"))
+            }
+            Language::TypeScript if node.kind() == "comment" => self.extract_comment(node),
+            _ => None,
         }
-        let is_header = self.is_header_position(node);
-        let (class, directive) = classify(&body, kind, is_header, self.marker_prefix, self.markers);
-        self.push(node, kind, class, body, raw, directive);
+    }
+
+    /// Everything attribution decides for one comment node.
+    fn extract_comment<'tree>(&self, node: Node<'tree>) -> Option<Extracted<'tree>> {
+        let channel = comment_channel(self.context.language, node, self.context.source);
+        let body = comment_body(&channel, node, self.context.source);
+        let (class, directive) = if let Some(class) = self.file_metadata_class(node, &body) {
+            (class, None)
+        } else {
+            let is_header = self.is_header_position(node);
+            classify(
+                &body,
+                channel.kind,
+                is_header,
+                self.context.marker_prefix,
+                self.context.markers,
+            )
+        };
+        Some(Extracted {
+            node,
+            kind: channel.kind,
+            body,
+            class,
+            directive,
+        })
     }
 
     /// File-metadata lines are exemptions, never finding-eligible prose.
@@ -185,7 +198,7 @@ impl<'a> Extractor<'a> {
     /// a pure function of the body. Exemption is exempt-but-observable:
     /// [`crate::exemptions::summary`] still counts these nodes.
     fn file_metadata_class(&self, node: Node<'_>, body: &str) -> Option<AttributionClass> {
-        if self.language != Language::Python {
+        if self.context.language != Language::Python {
             return None;
         }
         let row = node.start_position().row;
@@ -193,51 +206,68 @@ impl<'a> Extractor<'a> {
         metadata.then_some(AttributionClass::Exemption)
     }
 
-    fn push_docstring(&mut self, node: Node<'_>, is_module: bool) {
-        let source = self.source;
-        let raw = source.get(node.byte_range()).unwrap_or("");
-        let body = python_docstring_body(node, raw, source);
+    /// Everything attribution decides for one Python docstring literal.
+    ///
+    /// `is_module` marks the module docstring, whose channel is the file
+    /// header; class and function docstrings are ordinary docs.
+    fn extract_docstring<'tree>(
+        &self,
+        docstring: Node<'tree>,
+        is_module: bool,
+    ) -> Extracted<'tree> {
+        let raw = self
+            .context
+            .source
+            .get(docstring.byte_range())
+            .unwrap_or("");
+        let body = python_docstring_body(docstring, raw, self.context.source);
         let (class, directive) = classify(
             &body,
             CommentKind::Doc,
             is_module,
-            self.marker_prefix,
-            self.markers,
+            self.context.marker_prefix,
+            self.context.markers,
         );
-        self.push(node, CommentKind::Doc, class, body, raw, directive);
+        Extracted {
+            node: docstring,
+            kind: CommentKind::Doc,
+            body,
+            class,
+            directive,
+        }
     }
 
-    fn push(
-        &mut self,
-        node: Node<'_>,
-        kind: CommentKind,
-        class: AttributionClass,
-        body: String,
-        raw: &str,
-        directive: Option<crate::model::SuppressionDirective>,
-    ) {
-        let next_code_line = match kind {
+    /// Record one extraction with its line, symbol path, and next code line.
+    fn finish(&self, extracted: Extracted<'_>) -> (usize, CommentNode) {
+        let node = extracted.node;
+        let next_code_line = match extracted.kind {
             CommentKind::Doc => None,
-            CommentKind::Line | CommentKind::Block => next_code_line(node, self.source),
+            CommentKind::Line | CommentKind::Block => next_code_line(node, self.context.source),
         };
-        let start_byte = node.start_byte();
-        self.nodes.push((
-            start_byte,
+        let text = self
+            .context
+            .source
+            .get(node.byte_range())
+            .unwrap_or("")
+            .trim_end_matches(['\r', '\n'])
+            .to_string();
+        (
+            node.start_byte(),
             CommentNode {
                 line: node.start_position().row + 1,
-                kind,
-                class,
-                symbol_path: symbol_path(node, self.language, self.source),
-                body,
-                text: raw.trim_end_matches(['\r', '\n']).to_string(),
-                directive,
+                kind: extracted.kind,
+                class: extracted.class,
+                symbol_path: symbol_path(node, self.context.language, self.context.source),
+                body: extracted.body,
+                text,
+                directive: extracted.directive,
                 next_code_line,
             },
-        ));
+        )
     }
 
     fn is_header_position(&self, node: Node<'_>) -> bool {
-        match self.language {
+        match self.context.language {
             // Only an inner doc comment inside the leading inner-doc run is
             // the header channel: `mod inner { //! docs }` documents a module,
             // not the file.
@@ -245,6 +275,7 @@ impl<'a> Extractor<'a> {
                 node.child_by_field_name("inner").is_some() && self.in_header_span(node)
             }
             Language::Python => self
+                .context
                 .module_doc_start
                 .is_some_and(|start| node.start_byte() == start),
             Language::TypeScript => self.in_header_span(node),
@@ -252,7 +283,8 @@ impl<'a> Extractor<'a> {
     }
 
     fn in_header_span(&self, node: Node<'_>) -> bool {
-        self.header_span
+        self.context
+            .header_span
             .is_some_and(|(start, end)| (start..end).contains(&node.start_byte()))
     }
 }

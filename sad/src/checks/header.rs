@@ -53,13 +53,19 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
         return Vec::new();
     }
 
-    vec![Finding {
+    vec![missing_header_finding(file, body, &missing)]
+}
+
+/// The one file-scoped `missing_header` finding for the `missing` keywords.
+///
+/// A missing header is a property of the file's leading area, so the finding
+/// stays anchored to line 1 even when the inspected block starts below a
+/// skipped licence banner.
+fn missing_header_finding(file: &AnalyzedFile, body: String, missing: &[&str]) -> Finding {
+    Finding {
         check: FindingKind::MissingHeader,
         id: finding_id(&file.path, "-", &body),
         path: file.path.clone(),
-        // A missing header is a property of the file's leading area, so the
-        // finding stays anchored to line 1 even when the inspected block
-        // starts below a skipped licence banner.
         line: 1,
         symbol_path: "-".to_string(),
         message: format!(
@@ -70,7 +76,7 @@ pub fn run(file: &AnalyzedFile, cfg: &Config) -> Vec<Finding> {
         severity: Severity::Error,
         smell: None,
         remediation: remediation::for_kind(FindingKind::MissingHeader, &file.path),
-    }]
+    }
 }
 
 /// The file's first header block: the leading contiguous run of comment nodes
@@ -90,10 +96,12 @@ fn first_block(nodes: &[CommentNode]) -> &[CommentNode] {
         return &[];
     };
 
-    let mut end = start + 1;
-    while end < nodes.len() && adjacent(&nodes[end - 1], &nodes[end]) {
-        end += 1;
-    }
+    let end = start
+        + 1
+        + nodes[start..]
+            .windows(2)
+            .take_while(|pair| adjacent(&pair[0], &pair[1]))
+            .count();
     &nodes[start..end]
 }
 
@@ -111,19 +119,12 @@ fn end_line(node: &CommentNode) -> usize {
 /// per-line Rust doc block loses during extraction. Exemption nodes carried
 /// inside the run contribute no prose, so their bodies are skipped.
 fn block_body(block: &[CommentNode]) -> String {
-    let mut body = String::new();
-    let mut first = true;
-    for node in block
+    block
         .iter()
         .filter(|node| node.class != AttributionClass::Exemption)
-    {
-        if !first {
-            body.push('\n');
-        }
-        first = false;
-        body.push_str(&node.body);
-    }
-    body
+        .map(|node| node.body.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// True when `body` opens one of its lines with `keyword`.

@@ -24,62 +24,15 @@ use std::fs;
 use std::path::Path;
 
 use self::gitignore::IgnoreStack;
+use self::skip_lists::{AMBIGUOUS_SKIPPED_DIRECTORIES, SKIPPED_DIRECTORIES};
 
 mod gitignore;
+mod skip_lists;
 
 /// Extensions the gate understands (matching [`crate::extract::language_for_path`]).
 const SOURCE_EXTENSIONS: [&str; 6] = ["rs", "py", "pyi", "ts", "js", "mjs"];
 
 const UNSUPPORTED_EXTENSIONS: [&str; 4] = ["tsx", "mts", "cts", "jsx"];
-
-/// Directory names never traversed: VCS metadata, dependency installs, caches, and build output.
-///
-/// Two rules govern the list. First, every listed name is reserved for a
-/// machine tree — `.git`, `.beads`, dependency installs (`node_modules`,
-/// `vendor`, `third_party`, `.venv`, `venv`, `.tox`), caches (`.mypy_cache`,
-/// `.ruff_cache`, `.pytest_cache`, `__pycache__`, `.turbo`), build and bundler
-/// output (`target`, `dist`, `build`, `out`, `.next`, `.svelte-kit`,
-/// `coverage`), or the rendered `book` — so a hand-written source directory
-/// must not use one. Second, the names match at any depth, so a matching
-/// directory nested below the repository root is ambiguous: a legitimate
-/// source directory can be named `target`, `build`, `dist`, `book`, or `out`.
-/// Nested matches from that ambiguous subset are recorded in
-/// [`Discovery::skipped`] so the run names the directory instead of dropping
-/// its sources silently, while a root-level `target/` or `build/` stays the
-/// conventional build output and is silent. Skipping the list keeps the walk
-/// finite, independent of what tooling last ran in the tree, and — because
-/// untracked files are in default scope — keeps a local virtualenv from
-/// flooding the gate with third-party prose.
-const SKIPPED_DIRECTORIES: [&str; 21] = [
-    ".git",
-    "target",
-    "book",
-    ".beads",
-    "node_modules",
-    "vendor",
-    "third_party",
-    ".venv",
-    "venv",
-    ".tox",
-    ".mypy_cache",
-    ".ruff_cache",
-    "dist",
-    "build",
-    "out",
-    ".next",
-    ".turbo",
-    ".svelte-kit",
-    "coverage",
-    ".pytest_cache",
-    "__pycache__",
-];
-
-/// Skip-list names that are also plausible source-directory names.
-///
-/// Only the ambiguous subset is reported when it appears below the root: a
-/// nested `.venv` or `node_modules` is unambiguously machine-generated, while
-/// a nested `target` may be hand-written code the gate would otherwise hide.
-const AMBIGUOUS_SKIPPED_DIRECTORIES: [&str; 5] = ["target", "build", "dist", "book", "out"];
 
 #[derive(Debug, Default)]
 pub(super) struct Discovery {
@@ -102,6 +55,9 @@ pub(super) fn discover_files(repo: &Path) -> Discovery {
     discovery
 }
 
+/// Walks `dir`, visiting subdirectories and eligible source files; symlink
+/// entries are skipped, since following them could loop and the walk must
+/// stay inside the real tree.
 fn walk(root: &Path, dir: &Path, discovery: &mut Discovery, ignores: &mut Option<IgnoreStack>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -110,15 +66,12 @@ fn walk(root: &Path, dir: &Path, discovery: &mut Discovery, ignores: &mut Option
         let Ok(file_type) = entry.file_type() else {
             continue;
         };
-        let name = entry.file_name().to_string_lossy().into_owned();
         let path = entry.path();
         if file_type.is_dir() {
-            walk_directory(root, &path, &name, discovery, ignores);
+            walk_directory(root, &path, discovery, ignores);
         } else if file_type.is_file() {
             walk_file(root, &path, discovery, ignores);
         }
-        // Symlinks are neither files nor directories here: following them
-        // could loop, so the walk stays inside the real tree.
     }
 }
 
@@ -126,12 +79,16 @@ fn walk(root: &Path, dir: &Path, discovery: &mut Discovery, ignores: &mut Option
 fn walk_directory(
     root: &Path,
     path: &Path,
-    name: &str,
     discovery: &mut Discovery,
     ignores: &mut Option<IgnoreStack>,
 ) {
-    if SKIPPED_DIRECTORIES.contains(&name) {
-        record_skipped_directory(root, path, name, discovery);
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    if SKIPPED_DIRECTORIES.contains(&name.as_str()) {
+        record_skipped_directory(root, path, &name, discovery);
         return;
     }
     if is_ignored(ignores, root, path, true) {
@@ -244,22 +201,8 @@ mod tests {
 
     #[test]
     fn added_skip_names_are_skipped() {
-        let root = std::env::temp_dir().join(format!("sad-check-skips-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        for name in [
-            "vendor",
-            "third_party",
-            ".mypy_cache",
-            ".ruff_cache",
-            "out",
-            ".turbo",
-            ".svelte-kit",
-        ] {
-            let skipped = root.join(name).join("nested");
-            fs::create_dir_all(&skipped).expect("skipped tree is created");
-            fs::write(skipped.join("hidden.rs"), "fn hidden() {}").expect("fixture is written");
-        }
-
+        let root = temp_root("sad-check-skips");
+        write_added_skip_trees(&root);
         let discovery = discover_files(&root);
         assert!(
             discovery.files.is_empty(),
@@ -390,6 +333,22 @@ mod tests {
         let root = std::env::temp_dir().join(format!("{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         root
+    }
+
+    fn write_added_skip_trees(root: &Path) {
+        for name in [
+            "vendor",
+            "third_party",
+            ".mypy_cache",
+            ".ruff_cache",
+            "out",
+            ".turbo",
+            ".svelte-kit",
+        ] {
+            let skipped = root.join(name).join("nested");
+            fs::create_dir_all(&skipped).expect("skipped tree is created");
+            fs::write(skipped.join("hidden.rs"), "fn hidden() {}").expect("fixture is written");
+        }
     }
 
     fn generated_tree(root: &Path, ignore: &str) {

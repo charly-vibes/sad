@@ -211,7 +211,7 @@ fn text_mode_names_the_attribution_scope_when_nothing_is_selected() {
     let repo = TempRepo::new("text-scope-zero");
     repo.write("src/lib.rs", "fn main() {}\n");
     git(repo.path(), &["init", "--quiet"]);
-    commit_file(repo.path(), "src/lib.rs", "add legacy file", None);
+    commit_file(repo.path(), Commit::new("src/lib.rs", "add legacy file"));
     repo.write(
         "src/lib.rs",
         "// narration added in an uncommitted edit\nfn main() {}\n",

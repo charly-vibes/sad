@@ -73,18 +73,34 @@ impl Checker {
         if file.exempt || !cfg.checks.commented_out_code {
             return (Vec::new(), Vec::new());
         }
-        let mut findings = Vec::new();
-        let mut consumed = Vec::new();
-        for block in blocks(&file.nodes) {
-            let nodes: Vec<&CommentNode> = block.iter().map(|index| &file.nodes[*index]).collect();
-            let body = normalise_block(file.language, &nodes);
-            if body.is_empty() || !self.parses_as_code(file.language, &body) {
-                continue;
-            }
-            findings.push(finding(file, nodes[0], body));
-            consumed.extend(block);
-        }
+        let matched = self.matched_blocks(file);
+        let findings = matched.iter().map(|(finding, _)| finding.clone()).collect();
+        let consumed = matched.into_iter().flat_map(|(_, block)| block).collect();
         (findings, consumed)
+    }
+
+    /// One finding per candidate block that normalises and parses as
+    /// commented-out code, paired with the node indices the block consumed.
+    fn matched_blocks(&mut self, file: &AnalyzedFile) -> Vec<(Finding, Vec<usize>)> {
+        blocks(&file.nodes)
+            .into_iter()
+            .filter_map(|block| self.matched_block(file, block))
+            .collect()
+    }
+
+    /// The finding and consumed indices for one candidate block, or `None`
+    /// when the block normalises to nothing or fails the predicate.
+    fn matched_block(
+        &mut self,
+        file: &AnalyzedFile,
+        block: Vec<usize>,
+    ) -> Option<(Finding, Vec<usize>)> {
+        let nodes: Vec<&CommentNode> = block.iter().map(|index| &file.nodes[*index]).collect();
+        let body = normalise_block(file.language, &nodes);
+        if body.is_empty() || !self.parses_as_code(file.language, &body) {
+            return None;
+        }
+        Some((finding(file, nodes[0], body), block))
     }
 
     /// Parse `body` with the pinned frontend and apply the static predicate.
@@ -108,28 +124,41 @@ impl Checker {
         if body.len() <= MAX_PREDICATE_BYTES && body.lines().count() <= MAX_PREDICATE_LINES {
             return parses_body(parser, language, body);
         }
-        let mut chunk = String::new();
-        let mut chunk_lines = 0usize;
-        for line in body.lines() {
-            if line.len() > MAX_PREDICATE_BYTES {
-                return false;
-            }
-            if chunk_lines > 0
-                && (chunk.len() + line.len() + 1 > MAX_PREDICATE_BYTES
-                    || chunk_lines == MAX_PREDICATE_LINES)
-            {
-                if parses_body(parser, language, &chunk) {
-                    return true;
-                }
-                chunk.clear();
-                chunk_lines = 0;
-            }
-            chunk.push_str(line);
-            chunk.push('\n');
-            chunk_lines += 1;
-        }
-        !chunk.is_empty() && parses_body(parser, language, &chunk)
+        let Some(chunks) = chunk_bodies(body) else {
+            return false;
+        };
+        chunks
+            .iter()
+            .any(|chunk| parses_body(parser, language, chunk))
     }
+}
+
+/// Chunk an oversized body at line boundaries, packed up to both predicate
+/// bounds; `None` when one line alone exceeds the byte bound, which fails
+/// closed to prose exactly as the caller's in-loop check did.
+fn chunk_bodies(body: &str) -> Option<Vec<String>> {
+    let mut chunk = String::new();
+    let mut chunk_lines = 0usize;
+    let mut chunks = Vec::new();
+    for line in body.lines() {
+        if line.len() > MAX_PREDICATE_BYTES {
+            return None;
+        }
+        if chunk_lines > 0
+            && (chunk.len() + line.len() + 1 > MAX_PREDICATE_BYTES
+                || chunk_lines == MAX_PREDICATE_LINES)
+        {
+            chunks.push(std::mem::take(&mut chunk));
+            chunk_lines = 0;
+        }
+        chunk.push_str(line);
+        chunk.push('\n');
+        chunk_lines += 1;
+    }
+    if !chunk.is_empty() {
+        chunks.push(chunk);
+    }
+    Some(chunks)
 }
 
 /// Parse one bounded input and apply the static predicate.
@@ -178,27 +207,19 @@ fn finding(file: &AnalyzedFile, anchor: &CommentNode, body: String) -> Finding {
 /// Maximal runs of adjacent finding-eligible prose nodes, as node indices.
 ///
 /// Any non-eligible node — code, a blank comment, doc, header, marker, or a
-/// suppression directive — flushes the run, and a line gap or a different
+/// suppression directive — ends its run, and a line gap or a different
 /// symbol path starts a new one. Same-row nodes join because the run means
-/// "no row gap", not "one node per row".
+/// "no row gap", not "one node per row": grouping the eligible indices by
+/// their pairwise `joins` relation yields exactly the maximal runs.
 fn blocks(nodes: &[CommentNode]) -> Vec<Vec<usize>> {
-    let mut blocks = Vec::new();
-    let mut current: Vec<usize> = Vec::new();
-    for (index, node) in nodes.iter().enumerate() {
-        if !eligible(node) {
-            flush(&mut blocks, &mut current);
-            continue;
-        }
-        let joins = current
-            .last()
-            .is_some_and(|last| joins(&nodes[*last], node));
-        if !joins {
-            flush(&mut blocks, &mut current);
-        }
-        current.push(index);
-    }
-    flush(&mut blocks, &mut current);
-    blocks
+    nodes
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| eligible(node).then_some(index))
+        .collect::<Vec<usize>>()
+        .chunk_by(|left, right| joins(&nodes[*left], &nodes[*right]))
+        .map(<[usize]>::to_vec)
+        .collect()
 }
 
 /// Finding eligibility is exactly the outside-channel rule: prose with a body.
@@ -210,10 +231,4 @@ fn eligible(node: &CommentNode) -> bool {
 fn joins(previous: &CommentNode, next: &CommentNode) -> bool {
     next.symbol_path == previous.symbol_path
         && next.line <= previous.line + previous.text.lines().count()
-}
-
-fn flush(blocks: &mut Vec<Vec<usize>>, current: &mut Vec<usize>) {
-    if !current.is_empty() {
-        blocks.push(std::mem::take(current));
-    }
 }

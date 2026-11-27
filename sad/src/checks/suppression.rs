@@ -204,12 +204,15 @@ mod tests {
         let original = run(&file_with(nodes.clone()), &cfg);
         assert_eq!(original.len(), 1);
 
-        let mut drifted = nodes.clone();
-        for node in &mut drifted {
-            node.line += 40;
-        }
-        let mut reordered = nodes;
-        reordered.reverse();
+        let drifted: Vec<CommentNode> = nodes
+            .clone()
+            .into_iter()
+            .map(|mut node| {
+                node.line += 40;
+                node
+            })
+            .collect();
+        let reordered: Vec<CommentNode> = nodes.into_iter().rev().collect();
 
         for (label, variant) in [("line drift", drifted), ("reordering", reordered)] {
             let findings = run(&file_with(variant), &cfg);
@@ -230,8 +233,10 @@ mod tests {
 
         let mut rescoped = nodes.clone();
         rescoped[2].directive.as_mut().expect("directive").check = Some("missing_header".into());
-        let mut grown = nodes;
-        grown.push(directive_node(12, SuppressionForm::TypeIgnore, None));
+        let grown: Vec<CommentNode> = nodes
+            .into_iter()
+            .chain([directive_node(12, SuppressionForm::TypeIgnore, None)])
+            .collect();
 
         for (label, variant) in [
             ("a rescoped directive", rescoped),

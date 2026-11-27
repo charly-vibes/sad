@@ -181,11 +181,12 @@ fn install_wires_both_stages_when_both_sections_exist() {
     );
 }
 
+/// Scenario: pre-commit wires, pre-push is unanchorable (quoted key).
+///
+/// The failure envelope names pre-push while the pre-commit block stays
+/// on disk.
 #[test]
 fn install_reports_partial_wiring_when_a_later_stage_fails() {
-    // Scenario: pre-commit wires, pre-push is unanchorable (quoted key).
-    // The failure envelope names pre-push while the pre-commit block stays
-    // on disk.
     let repo = Repo::init("partial");
     fs::write(
         repo.path().join("lefthook.yml"),
@@ -208,11 +209,12 @@ fn install_reports_partial_wiring_when_a_later_stage_fails() {
     );
 }
 
+/// Scenario: the config from a partial run with the quoted key fixed.
+///
+/// Re-running reports the wired stage already_wired and wires the rest
+/// without duplicating the block.
 #[test]
 fn install_completes_partial_wiring_on_rerun() {
-    // Scenario: the config from a partial run with the quoted key fixed.
-    // Re-running reports the wired stage already_wired and wires the rest
-    // without duplicating the block.
     let repo = Repo::init("complete");
     fs::write(
         repo.path().join("lefthook.yml"),
