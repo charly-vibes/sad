@@ -253,9 +253,10 @@ fn ensure_blocks_are_pinned(text: &str) -> Result<(), HooksError> {
 /// an exact trimmed line.
 ///
 /// That is the same predicate the strip and the guard use, so detection and
-/// removal can never disagree. A missing stage yields `false`, because
+/// removal can never disagree, and the `sad doctor` wiring check reads
+/// wiring the same way. A missing stage yields `false`, because
 /// there is nothing to unwire.
-fn stage_has_block(content: &str, stage_key: &str) -> bool {
+pub(crate) fn stage_has_block(content: &str, stage_key: &str) -> bool {
     stage_section(content, stage_key)
         .is_some_and(|section| section.lines().any(|line| line.trim_end() == MANAGED_START))
 }
@@ -263,9 +264,9 @@ fn stage_has_block(content: &str, stage_key: &str) -> bool {
 /// The lefthook config genesis would wire, when one exists, as a path.
 ///
 /// Mirrors genesis's private `config_path` precedence (`lefthook.yml` wins
-/// over `lefthook.yaml`) so the guard, the injection, and the unwiring
-/// always read the same file.
-fn config_path(root: &Path) -> Option<PathBuf> {
+/// over `lefthook.yaml`) so the guard, the injection, the unwiring, and
+/// the `sad doctor` wiring check always read the same file.
+pub(crate) fn config_path(root: &Path) -> Option<PathBuf> {
     ["lefthook.yml", "lefthook.yaml"]
         .iter()
         .map(|name| root.join(name))
@@ -273,7 +274,7 @@ fn config_path(root: &Path) -> Option<PathBuf> {
 }
 
 /// The lefthook config text genesis would wire, when one exists.
-fn config_text(root: &Path) -> Option<String> {
+pub(crate) fn config_text(root: &Path) -> Option<String> {
     config_path(root).and_then(|path| std::fs::read_to_string(path).ok())
 }
 

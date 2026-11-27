@@ -72,9 +72,18 @@ dogfooded in this repository (pre-release).
 ```bash
 sad version [--json]   # tool identity as a genesis suite envelope
 sad check [--json] [--all] [--adopt] [--strict] [--config <path>]   # documentation gate
+sad doctor [--json] [--fix]   # structured diagnostics: config, hook wiring, baseline
+sad feedback [--json] <kind> [--title] [--dry-run] [--from-last-error]   # report an issue
+sad completions <shell>   # shell completions (raw stdout)
 ```
 
 Every command emits the suite JSON envelope; exit status mirrors `ok`.
+`sad completions` is the one exception: its success output is the raw
+shell script. `sad doctor` checks `sad.toml` validity, the `sad-check`
+hook wiring in `.lefthook.yml`, and `sad-baseline.json` integrity;
+`--fix` wires missing hook blocks. `sad feedback` files an issue against
+`charly-vibes/sad` via `gh`; `--dry-run` prints the body without
+submitting.
 
 ## Development
 

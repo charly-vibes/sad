@@ -53,6 +53,15 @@ unclassified, and the doc cap.
 - `sad check --adopt` — write and commit `sad-baseline.json` (shrink-only
   baseline of grandfathered finding IDs, then evaluate against it)
 - `sad version` — tool identity as a genesis suite envelope
+- `sad doctor [--fix]` — structured diagnostics for the cwd: `sad.toml`
+  validity, the `sad-check` managed block in `.lefthook.yml` (warns with a
+  `sad hooks install` remediation; `--fix` wires it), and
+  `sad-baseline.json` integrity; ok:false only on failed checks
+- `sad feedback <kind> [--title <t>] [--dry-run] [--from-last-error]` —
+  file an issue (bug|feature|question|chore) against `charly-vibes/sad`
+  via `gh`; reporting-only, never affects check results
+- `sad completions <shell>` — print shell completions (bash, zsh, fish,
+  powershell, elvish); raw stdout, not an envelope
 
 Global flags: `--json` (raw envelope). Flags accepted by `check`: `--all`,
 `--adopt`, `--strict`, `--config <path>` (default: `./sad.toml`, else

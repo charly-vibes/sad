@@ -5,7 +5,8 @@
 //! contract, the [`extract`] tree-sitter frontends, [`attribution`] channel
 //! classification, the [`checks`] gate checks, the [`check`] pipeline that
 //! runs them over a tree, [`remediation`] fix guidance, [`envelope`]
-//! (the genesis Check envelope), and [`render`] (text mode) to the thin
+//! (the genesis Check envelope), [`doctor`] (repository health diagnostics),
+//! [`feedback_cmd`] (issue reporting), and [`render`] (text mode) to the thin
 //! binary and to integration tests.
 //! Rationale: keeping logic in the lib target lets `tests/` drive the exact
 //! code path the binary runs, so CLI contract tests can't drift from reality.
@@ -15,10 +16,13 @@ pub mod baseline;
 pub mod check;
 pub mod checks;
 pub mod cli;
+pub mod commands;
 pub mod config;
+pub mod doctor;
 pub mod envelope;
 pub mod exemptions;
 pub mod extract;
+pub mod feedback_cmd;
 pub mod hooks;
 pub mod model;
 pub mod remediation;

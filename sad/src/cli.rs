@@ -1,7 +1,9 @@
 //! Purpose: clap CLI definition plus the single `run` dispatch that emits a
 //! genesis suite JSON envelope for every sad command.
-//! Responsibilities: parse arguments (global `--json`), route subcommands
-//! (`version`, `check`), resolve `sad.toml` for `check`, drive the check
+//! Responsibilities: parse arguments (global `--json`, guide verbosity),
+//! route subcommands (`version`, `check`, `hooks`, `doctor`, `feedback`,
+//! `completions`) — the non-check handlers live in [`crate::commands`] —
+//! resolve `sad.toml` for `check`, drive the check
 //! pipeline over the working directory, map config and baseline gate errors
 //! to envelope errors, and expose text mode from [`crate::render`].
 //! Rationale: the envelope is the *single* output format for all CLI commands
@@ -17,15 +19,19 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use genesis::envelope::{Envelope, EnvelopeKind, RemediationEntry};
+use genesis::envelope::RemediationEntry;
+use genesis::guide::CliVerbosity;
 
 use crate::envelope::spec_error_envelope;
 use crate::hooks::{hooks_envelope, hooks_failure_envelope, hooks_uninstall_envelope};
-use serde::Serialize;
 
 use crate::baseline::{self, BaselineError};
 use crate::config::{Config, ConfigError};
-use crate::{check, envelope};
+use crate::{check, commands, envelope};
+
+pub use commands::{run_completions, run_doctor_human};
+
+use commands::CheckArgs;
 
 /// Auto-discovered config file name, relative to the working directory.
 const DEFAULT_CONFIG_FILE: &str = "sad.toml";
@@ -43,6 +49,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Verbosity for guide-rendered human output (`-v`/`-vv`/`-vvv`, `-q`).
+    #[command(flatten)]
+    pub verbose: CliVerbosity,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -54,25 +64,41 @@ pub enum Command {
     Version,
     /// Analyze the working tree for documentation drift.
     Check {
-        /// Analyze every file instead of only changed ones.
-        #[arg(long)]
-        all: bool,
-        /// Adopt existing documentation instead of reporting it; implies
-        /// `--all` so adoption always sees the whole tree.
-        #[arg(long)]
-        adopt: bool,
-        /// Fail on any finding, not only error-severity findings.
-        #[arg(long)]
-        strict: bool,
-        /// Explicit `sad.toml` path; defaults to `./sad.toml` when present.
-        #[arg(long, value_name = "PATH")]
-        config: Option<PathBuf>,
+        /// The check flags.
+        #[command(flatten)]
+        args: CheckArgs,
     },
     /// Wire the sad gate into repository hook managers.
     Hooks {
         /// The hooks subcommand.
         #[command(subcommand)]
         command: HooksCommand,
+    },
+    /// Run structured repository diagnostics, with optional auto-fix.
+    Doctor {
+        /// Wire missing `sad-check` managed blocks during the run.
+        #[arg(long)]
+        fix: bool,
+    },
+    /// Report an issue to the sad tracker.
+    Feedback {
+        /// Kind of issue (bug|feature|question|chore).
+        kind: String,
+        /// Override the issue title (wins over derived titles).
+        #[arg(long)]
+        title: Option<String>,
+        /// Print the issue body and gh command without submitting.
+        #[arg(long)]
+        dry_run: bool,
+        /// Auto-populate the body from the last failed sad command.
+        #[arg(long)]
+        from_last_error: bool,
+    },
+    /// Print shell completions for sad.
+    Completions {
+        /// Shell to generate completions for (bash, zsh, fish, powershell,
+        /// elvish).
+        shell: clap_complete::Shell,
     },
 }
 
@@ -84,28 +110,6 @@ pub enum HooksCommand {
     Install,
     /// Remove the sad gate from lefthook's pre-commit and pre-push stages.
     Uninstall,
-}
-
-/// Data payload of the `sad version` envelope.
-#[derive(Debug, Serialize)]
-struct VersionData {
-    name: &'static str,
-    version: &'static str,
-    status: &'static str,
-}
-
-fn version_envelope() -> Envelope<VersionData> {
-    Envelope::success(
-        env!("CARGO_PKG_VERSION"),
-        EnvelopeKind::Version,
-        VersionData {
-            name: "sad",
-            version: env!("CARGO_PKG_VERSION"),
-            status: "active",
-        },
-        vec![],
-        vec![],
-    )
 }
 
 /// Resolve the effective config: explicit `--config`, else `./sad.toml` when
@@ -227,29 +231,38 @@ fn ledger_remediation() -> Vec<RemediationEntry> {
     }]
 }
 
+/// The `sad check` envelope: resolve the config, run the pipeline over the
+/// cwd, and map gate failures to error envelopes.
+fn check_command_envelope(args: &CheckArgs) -> serde_json::Result<serde_json::Value> {
+    match resolve_config(args.config.as_deref()) {
+        Ok(resolved) => {
+            let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            match check::run(&repo, &resolved, args.all, args.adopt) {
+                Ok(report) => serde_json::to_value(envelope::check_envelope(report, args.strict)),
+                Err(failure) => Ok(gate_failure_envelope(&failure, args.config.as_deref())),
+            }
+        }
+        Err((path, err)) => Ok(config_error_envelope(&path, &err)),
+    }
+}
+
 /// The single dispatch: every command returns its envelope serialized to
 /// JSON.
 ///
 /// Callers check `ok` first — the envelope is the only output format.
 pub fn run(command: Command) -> String {
     let envelope = match command {
-        Command::Version => serde_json::to_value(version_envelope()),
-        Command::Check {
-            all,
-            adopt,
-            strict,
-            config,
-        } => match resolve_config(config.as_deref()) {
-            Ok(resolved) => {
-                let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-                match check::run(&repo, &resolved, all, adopt) {
-                    Ok(report) => serde_json::to_value(envelope::check_envelope(report, strict)),
-                    Err(failure) => Ok(gate_failure_envelope(&failure, config.as_deref())),
-                }
-            }
-            Err((path, err)) => Ok(config_error_envelope(&path, &err)),
-        },
+        Command::Version => commands::version_envelope_value(),
+        Command::Check { args } => check_command_envelope(&args),
         Command::Hooks { command } => hooks_command_envelope(command),
+        Command::Doctor { fix } => commands::doctor_envelope(fix),
+        Command::Feedback {
+            kind,
+            title,
+            dry_run,
+            from_last_error,
+        } => commands::feedback_envelope(kind, title, dry_run, from_last_error),
+        Command::Completions { shell } => run_completions(shell),
     };
     serde_json::to_string(&envelope.expect("envelope serialization cannot fail"))
         .expect("envelope serialization cannot fail")

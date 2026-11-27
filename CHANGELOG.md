@@ -5,6 +5,15 @@ milestone, not by cadence.
 
 ## Unreleased
 
+- **Genesis module adoption** (sad-q3n): sad now uses the shared
+  `genesis-vibes` modules it was missing — `sad doctor` (structured
+  diagnostics over config, hook wiring, and baseline integrity, with
+  `--fix` for hook wiring), `sad feedback` (issue reporting against
+  `charly-vibes/sad` via `gh`), `sad completions <shell>`,
+  `--version --json` pre-parsing, `CliVerbosity` verbosity plumbing, and a
+  `ConfigFile`/`ConfigStore` implementation for `sad.toml`. All additive;
+  existing `check`/`hooks`/`version` behavior unchanged.
+
 - **Pretender 0.12.0 gate** (sad-9d2): internal refactor of `sad/src` to clear
   the new `pretender check --mode gate` findings — 16 oversized functions
   split, multi-parameter call sites threaded through context structs

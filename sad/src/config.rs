@@ -9,14 +9,25 @@
 //! [`ConfigError`] instead of silently running the gate at defaults, and an
 //! unreadable but existing config must surface rather than downgrade the gate;
 //! keeping the schema in one place means checks consume typed values and never
-//! parse TOML themselves.
+//! parse TOML themselves. Genesis adoption is purely additive: the
+//! [`genesis::config::ConfigFile`] impl delegates to the existing typed
+//! logic (tool name `sad`, file `sad.toml`), and [`registry`]/
+//! [`store`] expose the config to genesis discovery without touching
+//! [`Config::load`].
 
 use std::fmt;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use genesis::config::{ConfigFile, ConfigRegistry, ConfigStore, ConfigValidation};
 use serde::Deserialize;
+
+/// Tool name under which the sad config registers with `ConfigRegistry`.
+pub const TOOL_NAME: &str = "sad";
+
+/// Marker path of the sad config, relative to the repo root.
+pub const CONFIG_MARKER: &str = "sad.toml";
 
 /// Sentences of documentation summary allowed before the summary cap fires.
 const DEFAULT_DOC_SUMMARY_CAP: usize = 1;
@@ -75,11 +86,14 @@ impl Default for Config {
 impl Config {
     /// Parse and validate configuration from TOML text.
     pub fn from_toml_str(text: &str) -> Result<Self, ConfigError> {
-        let config: Self = toml::from_str(text).map_err(|err| ConfigError::Parse {
-            message: err.to_string(),
-        })?;
-        config.validate()?;
-        Ok(config)
+        toml::from_str::<Self>(text)
+            .map_err(|err| ConfigError::Parse {
+                message: err.to_string(),
+            })
+            .and_then(|config| {
+                config.validate()?;
+                Ok(config)
+            })
     }
 
     /// Read, parse, and validate the configuration at `path`.
@@ -114,6 +128,9 @@ impl Config {
     }
 
     /// Semantic checks that TOML types cannot express.
+    ///
+    /// Runs over the parsed fields; each violation names the offending key
+    /// and explains why the value is unusable.
     fn validate(&self) -> Result<(), ConfigError> {
         if self.doc_summary_cap == 0 {
             return Err(ConfigError::InvalidValue {
@@ -135,6 +152,46 @@ impl Config {
         }
         Ok(())
     }
+}
+
+impl ConfigFile for Config {
+    fn path(repo_root: &Path) -> PathBuf {
+        repo_root.join(CONFIG_MARKER)
+    }
+
+    /// Report sad's semantic checks through genesis validation results.
+    fn validate(&self) -> Result<Vec<ConfigValidation>, genesis::config::ConfigError> {
+        Config::validate(self)
+            .map(|_| Vec::new())
+            .or_else(|err| match err {
+                ConfigError::InvalidValue { key, message } => {
+                    Ok(vec![ConfigValidation::error(key, message)])
+                }
+                ConfigError::Io { message } | ConfigError::Parse { message } => {
+                    Ok(vec![ConfigValidation::error("config", message)])
+                }
+            })
+    }
+}
+
+/// Register the sad config schema on a fresh registry.
+fn registered_registry(mut registry: ConfigRegistry) -> ConfigRegistry {
+    registry.register::<Config>(TOOL_NAME, CONFIG_MARKER);
+    registry
+}
+
+/// Build a `ConfigRegistry` with the sad config registered.
+///
+/// Registration mirrors the sibling tools: the typed [`Config`] schema,
+/// its marker path [`CONFIG_MARKER`], and the semantic checks live here
+/// while genesis supplies the read/write/discovery machinery.
+pub fn registry() -> ConfigRegistry {
+    registered_registry(ConfigRegistry::new())
+}
+
+/// Wrap [`registry`] in a `ConfigStore` for typed access and discovery.
+pub fn store() -> ConfigStore {
+    ConfigStore::new(registry())
 }
 
 /// On/off switch for each named check.

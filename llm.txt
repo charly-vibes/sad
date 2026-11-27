@@ -23,6 +23,15 @@ envelope's `ok`: 0 on pass, 1 when error-severity findings block.
   IDs, commit it, evaluate against it; the baseline is shrink-only, so
   growing it fails the run
 - `sad version [--json]` — tool identity as a genesis suite envelope
+- `sad doctor [--json] [--fix]` — structured diagnostics for the cwd:
+  `sad.toml` validity, the `sad-check` managed block in `.lefthook.yml`
+  (warns with a `sad hooks install` remediation; `--fix` wires it), and
+  `sad-baseline.json` integrity; ok:false only on failed checks
+- `sad feedback [--json] <kind> [--title <t>] [--dry-run] [--from-last-error]`
+  — file an issue (bug|feature|question|chore) against `charly-vibes/sad`
+  via `gh`; reporting-only, never affects check results
+- `sad completions <shell>` — print shell completions (bash, zsh, fish,
+  powershell, elvish); raw stdout, not an envelope
 
 Flags accepted by `check`: `--json` (raw envelope), `--all`, `--adopt`,
 `--strict`, `--config <path>`.
