@@ -5,6 +5,13 @@ milestone, not by cadence.
 
 ## Unreleased
 
+- **Pretender 0.12.0 gate** (sad-9d2): internal refactor of `sad/src` to clear
+  the new `pretender check --mode gate` findings — 16 oversized functions
+  split, multi-parameter call sites threaded through context structs
+  (`Analyzer::analyze` is now `(rel_path, source)`), needless muts removed,
+  and test fixtures excluded from gate scope. Remaining baselined findings
+  are tool heuristics, not product code (see issue sad-cc7).
+
 - **Version identity**: `sad version` reports `status: "active"` — the
   `scaffold` tagline predated the v0.2.0 gate implementation and shipped.
 - **Docs site**: docs.yml now publishes `llms.txt` and `llm.txt` each under
