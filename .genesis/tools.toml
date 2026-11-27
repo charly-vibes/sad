@@ -1,9 +1,9 @@
-[tools.espectacular]
-description = "Spec-test correspondence enforcer"
+[tools.wai]
+description = "Workflow manager for AI-assisted development"
 
-[tools.espectacular.detector]
+[tools.wai.detector]
 type = "directory"
-path = ".espectacular"
+path = ".wai"
 
 [tools.testaruda]
 description = "Language-agnostic test selection engine"
@@ -12,9 +12,9 @@ description = "Language-agnostic test selection engine"
 type = "file"
 path = "testaruda.toml"
 
-[tools.wai]
-description = "Workflow manager for AI-assisted development"
+[tools.espectacular]
+description = "Spec-test correspondence enforcer"
 
-[tools.wai.detector]
+[tools.espectacular.detector]
 type = "directory"
-path = ".wai"
+path = ".espectacular"
