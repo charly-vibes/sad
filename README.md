@@ -15,7 +15,7 @@
 > [pretender](https://github.com/charly-vibes/pretender) (structural
 > complexity gates) and [vampiro](https://github.com/charly-vibes/vampiro)
 > (composition proofs) — same CI-and-pre-commit gate family.
-> **Status:** scaffold · [gate model specified](docs/src/gate-model.md) · [status](docs/src/status.md)
+> **Status:** v0.2.0 published · [gate model specified](docs/src/gate-model.md) · [status](docs/src/status.md)
 > · [charly-vibes Tool Ecosystem](https://charly-vibes.github.io/dulce-de-leche/ecosystem-map.html)
 [![tracked with wai](https://img.shields.io/badge/tracked%20with-wai-blue)](https://github.com/charly-vibes/wai)
 [![CI](https://github.com/charly-vibes/sad/actions/workflows/ci.yml/badge.svg)](https://github.com/charly-vibes/sad/actions/workflows/ci.yml)
@@ -71,7 +71,7 @@ dogfooded in this repository (pre-release).
 
 ```bash
 sad version [--json]   # tool identity as a genesis suite envelope
-sad check [--json] [--all] [--adopt] [--config <path>]   # documentation gate
+sad check [--json] [--all] [--adopt] [--strict] [--config <path>]   # documentation gate
 ```
 
 Every command emits the suite JSON envelope; exit status mirrors `ok`.

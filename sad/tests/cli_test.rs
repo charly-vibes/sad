@@ -29,7 +29,7 @@ fn version_text_mode_is_a_short_banner() {
         .assert()
         .success()
         .stdout(str::starts_with("sad "))
-        .stdout(str::contains("scaffold"));
+        .stdout(str::contains("active"));
 }
 
 #[test]

@@ -23,7 +23,7 @@ EARS spec is deployed at
 [`openspec/specs/comment-gate/spec.md`](https://github.com/charly-vibes/sad/blob/main/openspec/specs/comment-gate/spec.md)
 (change archived 2026-11-18, with 24 property-derived contracts under
 `.espectacular/comment-gate/`). Ticket `sad-lcy` is closed. Live command surface:
-`sad version` and `sad check [--all] [--adopt] [--config <path>] [--json]`.
+`sad version` and `sad check [--all] [--adopt] [--strict] [--config <path>] [--json]`.
 Measurement duty and first published rates: [Validation](validation.md).
 Implementation history lives in
 [CHANGELOG](https://github.com/charly-vibes/sad/blob/main/CHANGELOG.md).

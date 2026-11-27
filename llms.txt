@@ -54,8 +54,9 @@ unclassified, and the doc cap.
   baseline of grandfathered finding IDs, then evaluate against it)
 - `sad version` — tool identity as a genesis suite envelope
 
-Global flags: `--json` (raw envelope), `--config <path>` (default:
-`./sad.toml`, else built-in defaults).
+Global flags: `--json` (raw envelope). Flags accepted by `check`: `--all`,
+`--adopt`, `--strict`, `--config <path>` (default: `./sad.toml`, else
+built-in defaults).
 
 ## Install
 

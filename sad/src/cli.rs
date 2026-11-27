@@ -101,7 +101,7 @@ fn version_envelope() -> Envelope<VersionData> {
         VersionData {
             name: "sad",
             version: env!("CARGO_PKG_VERSION"),
-            status: "scaffold",
+            status: "active",
         },
         vec![],
         vec![],

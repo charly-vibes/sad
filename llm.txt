@@ -25,7 +25,7 @@ envelope's `ok`: 0 on pass, 1 when error-severity findings block.
 - `sad version [--json]` — tool identity as a genesis suite envelope
 
 Flags accepted by `check`: `--json` (raw envelope), `--all`, `--adopt`,
-`--config <path>`.
+`--strict`, `--config <path>`.
 
 ## Checks
 

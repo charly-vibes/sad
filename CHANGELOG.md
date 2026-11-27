@@ -5,6 +5,11 @@ milestone, not by cadence.
 
 ## Unreleased
 
+- **Version identity**: `sad version` reports `status: "active"` — the
+  `scaffold` tagline predated the v0.2.0 gate implementation and shipped.
+- **Docs site**: docs.yml now publishes `llms.txt` and `llm.txt` each under
+  its own name at the site root instead of copying the short file over
+  `llm.txt`, which orphaned the full reference.
 - **Hook wiring** (sad-t7y, sad-pcn, sad-0j6): `sad hooks install` wires a
   marker-owned managed block (`sad-check: run: sad check`) into lefthook's
   pre-commit and pre-push stages — idempotent (`already_wired`), safe against
