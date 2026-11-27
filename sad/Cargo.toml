@@ -25,6 +25,8 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# RFC 3339 timestamps for the local feedback scratch record.
+time = { version = "0.3", features = ["formatting"] }
 # `sad.toml` parsing — the config is TOML, not a bespoke mini-language.
 toml = "0.8"
 # User-configured marker ids are validated as regular expressions.

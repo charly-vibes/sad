@@ -7,22 +7,22 @@
 //! the binary layer stays thin and the logic stays unit-tested.
 
 use clap::Parser;
-use genesis::cli::maybe_print_version_json;
 use sad::cli::{self, Cli, Command};
 
 /// Run the `sad` command and exit with the envelope's status.
 ///
-/// `--version --json` is delegated to `genesis::cli`: clap intercepts
+/// `--version --json` is handled before clap parses: clap intercepts
 /// `--version` at the parser level, before the global `--json` flag is
-/// visible, so the combo is checked before parsing.
+/// visible, so the combo is checked on the raw argv.
 ///
-/// Human-mode doctor renders through the genesis guide instead of the text
-/// rendering of the envelope; `--json` keeps the envelope path.
+/// Human-mode doctor prints a plain summary instead of the text rendering
+/// of the envelope; `--json` keeps the envelope path.
 ///
 /// Exit status mirrors the envelope: ok:false is never reported as process
-/// success to machine consumers.
+/// success to machine consumers, and a failed command records a local
+/// scratch entry so `sad feedback --from-last-error` has content to read.
 fn main() {
-    if maybe_print_version_json("sad", env!("CARGO_PKG_VERSION")) {
+    if cli::maybe_print_version_json() {
         return;
     }
     let cli = match Cli::try_parse() {
@@ -33,12 +33,16 @@ fn main() {
         Command::Doctor { fix } if !cli.json => cli::run_doctor_human(fix, cli.verbose.verbosity()),
         command => cli::run(command),
     };
+    let code = cli::exit_code(&json);
+    if code != 0 {
+        cli::record_last_error_from_envelope(&json, code);
+    }
     if cli.json {
         println!("{json}");
     } else {
         println!("{}", cli::render_text(&json));
     }
-    std::process::exit(cli::exit_code(&json));
+    std::process::exit(code);
 }
 
 /// Handle a clap parse failure: help and version output print as clap text
@@ -55,5 +59,9 @@ fn handle_parse_error(err: clap::error::Error) -> ! {
     }
     let json = cli::argument_error_envelope(&err);
     println!("{json}");
-    std::process::exit(cli::exit_code(&json));
+    let code = cli::exit_code(&json);
+    if code != 0 {
+        cli::record_last_error_from_envelope(&json, code);
+    }
+    std::process::exit(code);
 }

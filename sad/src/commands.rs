@@ -11,8 +11,9 @@
 use std::path::PathBuf;
 
 use clap::CommandFactory;
+use genesis::doctor::{CheckStatus, DoctorReport};
 use genesis::envelope::{Envelope, EnvelopeKind, RemediationEntry};
-use genesis::guide::{Output, Verbosity};
+use genesis::guide::Verbosity;
 use serde::Serialize;
 
 use crate::envelope::spec_error_envelope;
@@ -68,6 +69,25 @@ pub(crate) fn version_envelope_value() -> serde_json::Result<serde_json::Value> 
     serde_json::to_value(version_envelope())
 }
 
+/// Handle `--version --json` before clap parses: clap intercepts
+/// `--version` at the parser level, before global flags like `--json` are
+/// visible, so the combo is checked on the raw argv. It prints the same
+/// envelope `sad version --json` emits, so the two version surfaces never
+/// disagree.
+pub fn maybe_print_version_json() -> bool {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let wants_version = args.iter().any(|a| a == "--version" || a == "-V");
+    let wants_json = args.iter().any(|a| a == "--json" || a == "-j");
+    if !(wants_version && wants_json) {
+        return false;
+    }
+    match version_envelope_value() {
+        Ok(json) => println!("{json}"),
+        Err(err) => eprintln!("sad: cannot serialize version envelope: {err}"),
+    }
+    true
+}
+
 /// The `sad doctor --json` envelope: structured repository diagnostics for
 /// the cwd.
 ///
@@ -80,13 +100,14 @@ pub(crate) fn doctor_envelope(fix: bool) -> serde_json::Result<serde_json::Value
 }
 
 /// The `sad feedback` envelope: issue reporting for the parsed arguments,
-/// run from the cwd.
-pub(crate) fn feedback_envelope(
+/// run from the cwd. Serialization cannot fail — the payload carries plain
+/// strings — so the value is returned directly.
+pub fn feedback_command_envelope(
     kind: String,
     title: Option<String>,
     dry_run: bool,
     from_last_error: bool,
-) -> serde_json::Result<serde_json::Value> {
+) -> serde_json::Value {
     let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let args = crate::feedback_cmd::FeedbackArgs {
         kind,
@@ -94,7 +115,7 @@ pub(crate) fn feedback_envelope(
         dry_run,
         from_last_error,
     };
-    Ok(crate::feedback_cmd::feedback_envelope(&args, &repo))
+    crate::feedback_cmd::feedback_envelope(&args, &repo)
 }
 
 /// `sad completions <shell>`: print the raw shell script to stdout.
@@ -107,9 +128,10 @@ pub fn run_completions(shell: clap_complete::Shell) -> ! {
     match genesis::cli::generate_completions(&mut cmd, shell) {
         Ok(()) => std::process::exit(0),
         Err(err) => {
+            let message = format!("failed to write shell completions: {err}");
             let json = serde_json::to_string(&spec_error_envelope(
                 "completions_error",
-                &format!("failed to write shell completions: {err}"),
+                &message,
                 "cli",
                 vec![RemediationEntry {
                     command: "sad completions bash".into(),
@@ -119,23 +141,56 @@ pub fn run_completions(shell: clap_complete::Shell) -> ! {
             ))
             .expect("envelope serialization cannot fail");
             println!("{json}");
+            crate::feedback_cmd::record_last_error(
+                "completions_error",
+                Some("sad completions bash".into()),
+                1,
+            );
             std::process::exit(crate::cli::exit_code(&json));
         }
     }
 }
 
-/// `sad doctor` without `--json`: render the report through the genesis
-/// guide.
-///
-/// The pass/warn/fail summary and every per-check message appear at the
-/// requested verbosity, then the process exits with the report's own code.
-/// The report is the same one the JSON path wraps, so the two modes can
-/// never disagree.
+/// `sad doctor` without `--json`: print a plain summary — one line per
+/// check plus the pass/warn/fail counts — hidden at quiet verbosity, then
+/// exit with the report's own code. The report is the same one the JSON
+/// path wraps, so the two modes can never disagree.
 pub fn run_doctor_human(fix: bool, verbosity: Verbosity) -> ! {
     let repo = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let report = crate::doctor::run(&crate::doctor::DoctorArgs { fix }, &repo);
-    Output::success(&report)
-        .print(verbosity, &mut std::io::stdout(), &mut std::io::stderr())
-        .unwrap_or_else(|err| eprintln!("sad doctor: cannot write report: {err}"));
+    if verbosity.should_show(Verbosity::Normal as u8) {
+        println!("{}", render_report(&report));
+    }
+    if report.summary.has_failures() {
+        let footer = report.checks.iter().find_map(|check| check.fix.clone());
+        crate::feedback_cmd::record_last_error("doctor", footer, report.exit_code());
+    }
     std::process::exit(report.exit_code());
+}
+
+/// Plain-text rendering of the doctor report: one line per check plus the
+/// pass/warn/fail counts, so the human path answers the same question the
+/// JSON envelope's `data` answers without Rust debug noise.
+fn render_report(report: &DoctorReport) -> String {
+    let mut lines: Vec<String> = report
+        .checks
+        .iter()
+        .map(|check| {
+            let status = match check.status {
+                CheckStatus::Pass => "pass",
+                CheckStatus::Warn => "warn",
+                CheckStatus::Fail => "fail",
+            };
+            match &check.fix {
+                Some(fix) => format!("{status} {}: {} (fix: {fix})", check.name, check.message),
+                None => format!("{status} {}: {}", check.name, check.message),
+            }
+        })
+        .collect();
+    let summary = &report.summary;
+    lines.push(format!(
+        "sad doctor: {} pass, {} warn, {} fail",
+        summary.pass, summary.warn, summary.fail
+    ));
+    lines.join("\n")
 }

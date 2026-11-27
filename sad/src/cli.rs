@@ -29,7 +29,7 @@ use crate::baseline::{self, BaselineError};
 use crate::config::{Config, ConfigError};
 use crate::{check, commands, envelope};
 
-pub use commands::{run_completions, run_doctor_human};
+pub use crate::feedback_cmd::record_last_error_from_envelope;
 
 use commands::CheckArgs;
 
@@ -261,7 +261,12 @@ pub fn run(command: Command) -> String {
             title,
             dry_run,
             from_last_error,
-        } => commands::feedback_envelope(kind, title, dry_run, from_last_error),
+        } => Ok(commands::feedback_command_envelope(
+            kind,
+            title,
+            dry_run,
+            from_last_error,
+        )),
         Command::Completions { shell } => run_completions(shell),
     };
     serde_json::to_string(&envelope.expect("envelope serialization cannot fail"))

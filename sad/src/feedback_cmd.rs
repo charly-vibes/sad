@@ -6,16 +6,71 @@
 //! its [`genesis::feedback::gh::GhResult`] outcome (created issue, fallback
 //! URL, or local file) into a success envelope via [`feedback_envelope`];
 //! every failure, including an invalid issue kind, becomes an error envelope
-//! with non-empty remediation.
+//! with non-empty remediation. Failed commands record a local scratch entry
+//! via [`record_last_error`] so `--from-last-error` has content to read.
 //! Rationale: feedback is advisory — it reports an issue and never blocks or
 //! alters `sad check` results — so this module only translates between the
 //! genesis feedback API and sad's envelope conventions and takes no part in
 //! gate verdicts.
 
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use genesis::envelope::{Envelope, EnvelopeKind, ErrorResult, RemediationEntry};
-use genesis::feedback::{self, gh};
+use genesis::feedback::{self, gh, scratch};
+
+/// Persist the last failed command for `sad feedback --from-last-error`,
+/// best-effort: the scratch store is local and advisory, and a write
+/// failure never changes the outcome being reported.
+pub fn record_last_error(kind: &str, footer: Option<String>, exit: i32) {
+    scratch::write_scratch_best_effort(
+        "sad",
+        &scratch::ErrorRecord {
+            ts: rfc3339_now(),
+            argv: std::env::args().collect(),
+            exit,
+            footer,
+            kind: kind.to_string(),
+        },
+    );
+}
+
+/// Record a failed command envelope: the kind is the envelope kind and the
+/// footer the first remediation command, so the scratch record answers the
+/// same questions the printed envelope answers. The CLI builds the envelope
+/// as a JSON string, so it is re-parsed here; an unparsable envelope
+/// records nothing rather than failing the command being reported.
+pub fn record_last_error_from_envelope(json: &str, exit: i32) {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(json) else {
+        return;
+    };
+    let kind = json
+        .get("envelope_kind")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("error");
+    let footer = json
+        .pointer("/data/remediation/0/command")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    record_last_error(kind, footer, exit);
+}
+
+/// Current UTC time as RFC 3339 — `ErrorRecord::ts` documents ISO 8601.
+fn rfc3339_now() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| unix_secs_fallback())
+}
+
+/// Degraded timestamp when RFC 3339 formatting fails: whole seconds since
+/// the Unix epoch (0 on clock failure), so the record still lands.
+fn unix_secs_fallback() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string()
+}
 
 /// Sad-side mirror of `genesis::feedback::FeedbackArgs`, one word per field.
 ///

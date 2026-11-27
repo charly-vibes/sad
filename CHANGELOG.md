@@ -5,6 +5,15 @@ milestone, not by cadence.
 
 ## Unreleased
 
+- **Review fixes** (rule-of-5 on sad-q3n): the human `sad doctor` path
+  prints a plain check-by-check summary instead of the report's Rust debug
+  dump; failed commands record a local scratch entry, so
+  `sad feedback --from-last-error` now has content to read;
+  `--version --json` emits the same envelope as `sad version --json`
+  (including `status`) instead of the name/version-only genesis shape; and
+  `sad doctor --fix` on a user-owned gate keeps its remediation instead of
+  reporting an unfixable fail.
+
 - **Genesis module adoption** (sad-q3n): sad now uses the shared
   `genesis-vibes` modules it was missing — `sad doctor` (structured
   diagnostics over config, hook wiring, and baseline integrity, with

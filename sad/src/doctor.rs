@@ -114,11 +114,26 @@ impl DoctorCheck for WiringCheck {
     }
 
     /// Wire the gate through the same installer `sad hooks install` runs,
-    /// so a fix and the command it names cannot diverge.
+    /// so a fix and the command it names cannot diverge. A stage that
+    /// already runs the gate outside the managed block stays unwired —
+    /// wiring it again would run the gate twice — and is reported back so
+    /// the post-fix entry keeps a runnable remediation.
     fn fix(&self, repo_root: &Path) -> Result<Vec<LintResult>, Box<dyn Error>> {
-        lefthook::install(repo_root)
-            .map(|_| vec![])
-            .map_err(|err| err.to_string().into())
+        let install =
+            lefthook::install(repo_root).map_err(|err| Box::<dyn Error>::from(err.to_string()))?;
+        let user_gated = [install.pre_commit, install.pre_push]
+            .contains(&crate::hooks::StageOutcome::SkippedUserGate);
+        if user_gated {
+            Ok(vec![LintResult::with_fix(
+                "the sad-check gate stays unwired: the lefthook config already runs the gate \
+                 outside the managed block"
+                    .to_string(),
+                Severity::Warning,
+                "sad hooks install",
+            )])
+        } else {
+            Ok(vec![])
+        }
     }
 }
 
