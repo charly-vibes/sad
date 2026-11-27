@@ -99,6 +99,21 @@ just ci        # fmt + type-check + lint + test — same gate as CI
 just book      # mdBook user docs
 ```
 
+## Research record
+
+sad's design and research trail is a verifiable record, not hand-maintained
+pages: [`kaya`](https://crates.io/crates/kaya) observes the artifacts the repo
+already produces (`.wai/` notes, git history) and appends them to the
+append-only ledger `.kaya/ledger.jsonl`, then compiles the generated
+documentation in [`docs/research/`](docs/research/index.md) and
+[`docs/public/`](docs/public/). Capture and verify both through `just`:
+
+```bash
+just record-capture   # import wai artifacts + git history, rebuild projections
+just record-verify    # recompute the projections read-only and check them
+just book             # mdBook docs; research/public pages ship in the book build
+```
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
