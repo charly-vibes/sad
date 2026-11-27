@@ -3,7 +3,7 @@
 All notable changes to sad. The format is loose — this project versions by
 milestone, not by cadence.
 
-## Unreleased
+## v0.3.0 — 2026-11-27
 
 - **Review fixes** (rule-of-5 on sad-q3n): the human `sad doctor` path
   prints a plain check-by-check summary instead of the report's Rust debug
