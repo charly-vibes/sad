@@ -139,3 +139,8 @@ record-capture:
 # Verify the committed record against its projections without writing
 record-verify:
 	kaya check
+
+# Record lag gate: fail when commits touching record-relevant paths exceed
+# the bound since the last capture frontier (kaya check + git rev-list).
+record-lag mode="fail" bound="60":
+	python3 scripts/record-lag.py --mode {{mode}} --bound {{bound}}

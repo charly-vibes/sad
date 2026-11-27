@@ -22,6 +22,8 @@ pre-push:
 # sad:managed:start
     sad-check:
       run: sad check
+    record-verify:
+      run: kaya check
 # sad:managed:end
     # ddl:managed:start (pre-push)
     ddl-ah-check:

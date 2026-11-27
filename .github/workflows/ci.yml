@@ -71,6 +71,17 @@ jobs:
       - name: Run CI pipeline
         run: just ci
 
+      # Record gates (sad-9sg.5): verify the COMMITTED record against its
+      # projections — `--index` checks the ledger as committed, immune to a
+      # dirty worktree — and fail when the record's capture frontier lags.
+      # kaya reports facts; the lag bound is repository policy (scripts/record-lag.py).
+      - name: Install kaya (pinned)
+        run: cargo install --locked kaya@0.4.1
+      - name: Verify committed record
+        run: kaya check --index
+      - name: Check record lag
+        run: python3 scripts/record-lag.py
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

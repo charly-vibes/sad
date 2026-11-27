@@ -1,0 +1,12 @@
+run_id: tdd-ro5-2026-11-27-sad-9sg-5-kaya-record-gates
+pipeline: tdd-ro5
+topic: sad-9sg.5 kaya record gates
+created_at: '2026-11-27T20:38:19.120787612+00:00'
+current_step: 9
+approvals:
+  ship-close: '2026-11-27T20:38:54.172081668+00:00'
+epic: null
+child_issues: []
+child_runs: []
+handoff_artifact: null
+bypasses: []
